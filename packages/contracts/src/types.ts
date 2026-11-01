@@ -225,7 +225,8 @@ export interface RunManifest {
   modelRoles: Record<string, string>;
   promptVersion: string | null;
   toolVersion: string;
-  memoryVariant: "observations-only";
+  memoryVariant: "observations-only" | "episodic-hybrid-v1";
+  memoryPolicy?: typeof import("./memory").memoryPolicy;
   contextTokenLimit: number;
   spendingLimitUsd: number;
   createdAt: string;

@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./agents";
+export * from "./memory";
 import { planProposalSchema } from "./agents";
 export { runtimePolicy } from "./runtime";
 import type { Scenario, Command } from "./types";

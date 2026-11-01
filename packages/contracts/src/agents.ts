@@ -53,6 +53,7 @@ export interface AgentConfiguration {
   model: string;
   spendingLimitMicroUsd: number;
   maxRequests: number;
+  memory?: boolean;
 }
 export interface ThinkingPayload {
   runId: string;

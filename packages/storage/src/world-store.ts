@@ -20,11 +20,13 @@ import {
   type RunProvenance,
   runtimePolicy,
   agentPolicy,
+  memoryPolicy,
   type AgentConfiguration,
   type AgentGuard,
 } from "@repo/contracts";
 import { applyCommand, createWorld, replay } from "@repo/engine";
 import { saveCheckpoint } from "./checkpoints";
+import { initializeMemories, recordMemories } from "./memory-ingest";
 import {
   initializeThinking,
   assertThinkingGuard,
@@ -70,8 +72,8 @@ export class WorldStore {
       version: 1,
       runId: state.runId,
       parentRunId: null,
-      engineVersion: "phase2-v1",
-      schemaVersion: "drizzle-0002",
+      engineVersion: "phase3-v1",
+      schemaVersion: "drizzle-0003",
       scenarioId: scenario.id,
       scenarioHash: await contentHash(scenario),
       engineCommit: commit,
@@ -82,7 +84,8 @@ export class WorldStore {
       modelRoles: agent ? { actor: agent.model } : {},
       promptVersion: agent ? agentPolicy.promptVersion : null,
       toolVersion: agent ? agentPolicy.toolVersion : "commands-v1",
-      memoryVariant: "observations-only",
+      memoryVariant: agent?.memory ? memoryPolicy.variant : "observations-only",
+      ...(agent?.memory ? { memoryPolicy } : {}),
       contextTokenLimit: agent ? agentPolicy.contextTokens : 0,
       spendingLimitUsd: agent ? agent.spendingLimitMicroUsd / 1000000 : 0,
       createdAt: new Date().toISOString(),
@@ -105,14 +108,13 @@ export class WorldStore {
       });
       await saveCheckpoint(tx, state, stateHash);
       if (agent) {
-        await tx
-          .insert(agentBudgets)
-          .values({
-            runId: state.runId,
-            limitMicroUsd: agent.spendingLimitMicroUsd,
-            maxRequests: agent.maxRequests,
-          });
+        await tx.insert(agentBudgets).values({
+          runId: state.runId,
+          limitMicroUsd: agent.spendingLimitMicroUsd,
+          maxRequests: agent.maxRequests,
+        });
         await initializeThinking(tx, state, agent);
+        if (agent.memory) await initializeMemories(tx, state, agent.citizenId);
       }
     });
     return { state, stateHash, manifest };
@@ -154,6 +156,7 @@ export class WorldStore {
         .select({
           state: runs.state,
           stateHash: runs.stateHash,
+          manifest: runs.manifest,
           valid: sql<boolean>`${runs.ownerId} = ${ownerId} and ${runs.ownerGeneration} = ${generation} and ${runs.leaseUntil} > clock_timestamp()`,
         })
         .from(runs)
@@ -214,6 +217,8 @@ export class WorldStore {
         receipt: result.receipt,
       });
       await recordThinkingTriggers(tx, row.state, result, command, guard);
+      if (row.manifest.agent?.memory)
+        await recordMemories(tx, result, row.manifest.agent.citizenId);
       await tx
         .update(runs)
         .set({

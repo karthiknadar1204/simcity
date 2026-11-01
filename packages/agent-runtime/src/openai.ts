@@ -9,6 +9,7 @@ export type ModelRequest = {
   context: string;
   history: unknown[];
   inputTokens: number;
+  allowTextOnly?: boolean;
 };
 export function countInput(request: Omit<ModelRequest, "inputTokens">) {
   return (
@@ -53,6 +54,7 @@ export function createOpenAIModel(
               ...request.history,
             ] as ResponseInputItem[],
             tools,
+            tool_choice: request.allowTextOnly ? "auto" : "required",
             parallel_tool_calls: false,
             reasoning: { effort: "none" },
             text: { verbosity: "low" },

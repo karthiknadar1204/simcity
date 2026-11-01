@@ -2,6 +2,8 @@
 
 Phase 2 connects one resident per run to a model. The resident can form and revise intentions, inspect permitted surroundings, retrieve personal evidence, and request real actions. The model does not directly move a sprite, update an inventory, or advance the clock. Those effects come from the existing deterministic engine.
 
+The intended product is an autonomous town in the spirit of [Generative Agents](https://arxiv.org/abs/2304.03442): residents independently observe, remember, plan, act, meet, talk, and influence later behavior. Phase 2's single resident is the first development gate toward that town. General world rules and a finite set of executable mechanics are necessary; specific residents' future choices and social outcomes must not be scripted.
+
 The implementation is present. The [verification report](./phase-2-verification.md) distinguishes passing mechanics tests from the live autonomy gate, which is pending a funded OpenAI request. Nothing in a scripted provider fixture counts as autonomous behavior.
 
 ## 1. Where the pieces live
@@ -32,6 +34,8 @@ The cognition consumer currently lives inside the API process so actions use tha
 10. **Think again:** completion, interruption, a permitted message, an encounter, a meaningful observed change, waking, or a scheduled review can enqueue another turn. The current plan and received outcomes carry forward.
 
 During travel, the model may inspect progress, continue its goal, revise its plan, or cancel before replacing a physical activity. The engine continues the walk unless it is cancelled, blocked, or completed. A resident encountering another person does not automatically abandon its goal.
+
+For an idle resident, Responses uses `tool_choice=required`: writing “I will go” cannot end the round in place of requesting a tool. The model remains free to choose reads, planning, movement, work, speech, sleep, or a bounded wait. The six-round limit still applies. A resident with a running job can finish with a continuation decision; cancelling that job switches subsequent rounds back to requiring a tool. The exact choice mode is saved with the model request.
 
 ## 3. A simple example — illustrative, not a recorded model result
 
@@ -91,6 +95,8 @@ Plans use optimistic version checks and validate cited source access. A brief re
 ## 6. Timing, sleep, and reactions
 
 Model calls use wall-clock timeouts. Actions, sleep durations, debounce, and review deadlines use simulation time. Redis delayed jobs are not the authority for in-world deadlines. World time freezes during server downtime and while paused.
+
+An automatic tick rechecks the latest running status after earlier commands finish. A tick queued behind Pause cannot advance the newly paused world. Idle residents receive another review within 30 simulated seconds even when a long-term plan requests a later review; a valid earlier review can run sooner. Active jobs retain their plan deadline, and their real results can trigger cognition immediately. An expired plan deadline falls back to the normal review interval instead of spinning.
 
 Meaningful triggers coalesce before a task fixes its information boundary. New relevant evidence after that boundary supersedes the old task with a new version. A late answer can still be saved for usage/accounting, but its old guard cannot apply a world effect. The replacement waits until the previous live lease is released or expires.
 

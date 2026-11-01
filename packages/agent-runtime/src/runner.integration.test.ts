@@ -47,6 +47,8 @@ live(
     try {
       const input = parseScenario(scenario),
         citizen = input.citizens[0]!;
+      const neighbor = input.citizens[1]!;
+      neighbor.position = { x: citizen.position.x + 1, y: citizen.position.y };
       const created = await worlds.create(
         input,
         "runtime-provider-fixture",
@@ -71,7 +73,8 @@ live(
       let calls = 0;
       const initial = (await agents.status(runId, citizen.id))!;
       const runner = new AgentRunner(worlds, agents, port, () => ({
-        async respond() {
+        async respond(request) {
+          expect(request.allowTextOnly).toBeFalse();
           calls++;
           return calls === 1
             ? answer("world_interact", {
@@ -151,6 +154,30 @@ live(
       expect(
         (await agents.rounds(next.control.taskId!))[0]!.outcome?.status,
       ).toBe("accepted");
+      await port.execute(runId, {
+        id: "busy-message",
+        action: {
+          kind: "say",
+          actorId: neighbor.id,
+          audienceIds: [citizen.id],
+          text: "I am nearby.",
+        },
+      });
+      await port.execute(runId, {
+        id: "busy-review-ready",
+        action: { kind: "advance", durationMs: 1000 },
+      });
+      const busy = (await agents.status(runId, citizen.id))!;
+      const continuing = new AgentRunner(worlds, agents, port, () => ({
+        async respond(request) {
+          expect(request.allowTextOnly).toBeTrue();
+          return { ...answer("actions_status", {}), call: null, output: [] };
+        },
+      }));
+      await continuing.run(busy.control.taskId!);
+      expect(
+        (await worlds.current(runId)).state.citizens[citizen.id]!.actionId,
+      ).toBe(jobId);
       await port.execute(runId, {
         id: "credit-case-cancel",
         action: { kind: "cancel", actorId: citizen.id },

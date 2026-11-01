@@ -183,14 +183,23 @@ try {
   await stop();
   const stopped = await store.current(runId);
   await Bun.sleep(1600);
+  const restartStartedAt = Date.now();
   await start();
   const resumed = await request<{ state: WorldState }>(`/runs/${runId}`);
   assert(
-    resumed.state.simTimeMs - stopped.state.simTimeMs < 1600,
+    resumed.state.simTimeMs - stopped.state.simTimeMs <=
+      Date.now() - restartStartedAt + 500,
     "Offline wall time was applied.",
   );
-  await Bun.sleep(1000);
-  const progressed = await request<{ state: WorldState }>(`/runs/${runId}`);
+  const progressDeadline = Date.now() + 10000;
+  let progressed = resumed;
+  while (
+    Date.now() < progressDeadline &&
+    progressed.state.simTimeMs === resumed.state.simTimeMs
+  ) {
+    await Bun.sleep(100);
+    progressed = await request<{ state: WorldState }>(`/runs/${runId}`);
+  }
   assert(
     progressed.state.simTimeMs > resumed.state.simTimeMs,
     "Running world did not resume.",
@@ -221,6 +230,24 @@ try {
   await Bun.write(".local/restart-proof.json", JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {
-  await stop();
-  await pool.end();
+  try {
+    await stop();
+  } finally {
+    if (runId) {
+      const owner = crypto.randomUUID();
+      try {
+        const generation = await store.claim(runId, owner);
+        await store.execute(runId, owner, generation, {
+          id: "restart-fixture-cleanup",
+          action: { kind: "set-status", status: "paused" },
+        });
+        await store.release(runId, owner, generation);
+      } catch {
+        console.error(
+          `Restart fixture ${runId} needs cleanup after its ownership lease expires.`,
+        );
+      }
+    }
+    await pool.end();
+  }
 }

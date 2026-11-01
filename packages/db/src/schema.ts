@@ -205,6 +205,7 @@ export const modelRounds = pgTable(
         context: string;
         history: unknown[];
         inputTokens: number;
+        allowTextOnly?: boolean;
       }>()
       .notNull(),
     answer: jsonb("answer").$type<ModelAnswer>(),

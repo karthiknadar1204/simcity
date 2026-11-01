@@ -80,3 +80,40 @@ for (const status of ["completed", "incomplete"] as const) {
     );
   });
 }
+
+for (const allowTextOnly of [false, true]) {
+  test(`the adapter ${allowTextOnly ? "permits continuation for an active job" : "requires a tool while idle"}`, async () => {
+    const model = createOpenAIModel(
+      "test-only-key",
+      agentPolicy.model,
+      async (_url, init) => {
+        const request = JSON.parse(String(init?.body));
+        expect(request.tool_choice).toBe(allowTextOnly ? "auto" : "required");
+        return new Response(
+          JSON.stringify({
+            id: "resp-choice-fixture",
+            status: "completed",
+            model: agentPolicy.model,
+            output: [],
+            usage: {
+              input_tokens: 10,
+              output_tokens: 2,
+              input_tokens_details: { cached_tokens: 0 },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    );
+    await model.respond(
+      {
+        instructions: "fixture",
+        context: "{}",
+        history: [],
+        inputTokens: 10,
+        allowTextOnly,
+      },
+      new AbortController().signal,
+    );
+  });
+}

@@ -75,6 +75,10 @@ export class AgentRunner {
       );
       const saved = await this.agents.rounds(taskId);
       const history: unknown[] = [];
+      const citizen = state.citizens[guard.citizenId]!;
+      let allowTextOnly = citizen.actionId
+        ? state.jobs[citizen.actionId]?.status === "running"
+        : false;
       for (let round = 0; round < agentPolicy.maxRounds; round++) {
         let record = saved.find((row) => row.round === round);
         if (!record) {
@@ -82,6 +86,7 @@ export class AgentRunner {
             instructions: citizenInstructions,
             context: JSON.stringify(context),
             history: [...history],
+            allowTextOnly,
           };
           const request: ModelRequest = {
             ...requestBase,
@@ -144,6 +149,11 @@ export class AgentRunner {
           ));
         if (!record.outcome)
           await this.agents.saveOutcome(state.runId, guard, round, outcome);
+        if (
+          answer.call.name === "actions_cancel" &&
+          outcome.status === "accepted"
+        )
+          allowTextOnly = false;
         if (answer.call.name === "memory_search" && record.outcome)
           broker.searches++;
         history.push({

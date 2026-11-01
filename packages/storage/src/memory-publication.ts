@@ -28,7 +28,13 @@ import {
   type WorldEvent,
   type WorldState,
 } from "@repo/contracts";
-import { validateAgreement, validateClaim, validateQuotes } from "@repo/memory";
+import {
+  validateAgreement,
+  validateClaim,
+  validateQuotes,
+  normalizeAgreementCalendar,
+  normalizeAgreementReference,
+} from "@repo/memory";
 import { applyEvent } from "@repo/engine";
 import { assertMemoryLease } from "./memory-work-store";
 import { MemoryStore } from "./memory-store";
@@ -418,14 +424,14 @@ export async function publishMemoryAnswer(
             ),
           );
     }
-    for (const [index, candidate] of extraction.agreements.entries()) {
+    for (const [index, proposed] of extraction.agreements.entries()) {
       if (payload.operation === "consolidate") {
         rejected.push(
           `agreement ${index}: Consolidation cannot create agreements.`,
         );
         continue;
       }
-      const logicalId = `c-${await contentHash({ runId: payload.runId, citizenId: payload.citizenId, originSourceId: candidate.originSourceId })}`;
+      const proposedId = `c-${await contentHash({ runId: payload.runId, citizenId: payload.citizenId, originSourceId: proposed.originSourceId })}`;
       const [existing] = await tx
         .select()
         .from(commitmentVersions)
@@ -433,14 +439,27 @@ export async function publishMemoryAnswer(
           and(
             eq(commitmentVersions.runId, payload.runId),
             eq(commitmentVersions.citizenId, payload.citizenId),
-            eq(commitmentVersions.logicalId, logicalId),
+            eq(
+              commitmentVersions.logicalId,
+              proposed.commitmentId ?? proposedId,
+            ),
             isNull(commitmentVersions.supersededSequence),
           ),
         )
         .orderBy(desc(commitmentVersions.version))
         .limit(1);
+      const logicalId = existing?.logicalId ?? proposedId;
       let checked: ReturnType<typeof validateAgreement>;
+      let candidate: typeof proposed;
       try {
+        candidate = normalizeAgreementCalendar(
+          normalizeAgreementReference(proposed, existing ?? null),
+          sources,
+          payload.citizenId,
+          payload.cutoff,
+          state.rules.dayLengthMs,
+          existing ?? null,
+        );
         checked = validateAgreement(
           candidate,
           sources,
@@ -468,6 +487,14 @@ export async function publishMemoryAnswer(
         continue;
       }
       if (!checked.accepted) {
+        if (
+          existing &&
+          candidate.proposal.sourceId === existing.originSourceId &&
+          checked.effectiveSequence <= existing.effectiveSequence &&
+          candidate.amount === existing.amount &&
+          candidate.deadlineMs === existing.deadlineMs
+        )
+          continue;
         await write(
           `proposal:${candidate.originSourceId}:${candidate.operation}`,
           "proposal",
@@ -540,6 +567,15 @@ export async function publishMemoryAnswer(
         {
           commitmentId: record.logicalId,
           commitmentVersionId: record.id,
+          calendarNormalization: {
+            modelDeadlineMs: proposed.deadlineMs,
+            canonicalDeadlineMs: record.deadlineMs,
+            basis: "exact source clock and simulation day",
+          },
+          identityNormalization: {
+            modelOriginSourceId: proposed.originSourceId,
+            canonicalOriginSourceId: candidate.originSourceId,
+          },
           projectIds: [`commitment:${record.logicalId}`],
         },
       );

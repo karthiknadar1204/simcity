@@ -12,6 +12,8 @@ import {
   currentAt,
   diverseMemories,
   validateClaim,
+  normalizeAgreementCalendar,
+  normalizeAgreementReference,
 } from "./index";
 
 const sources: MemorySource[] = [
@@ -91,13 +93,124 @@ test("a definite agreement requires accessible exact evidence, both parties, and
     ),
   ).toThrow();
 });
+test("a scoped existing agreement supplies its canonical origin without changing proposed terms", () => {
+  const existing = {
+    logicalId: "c1",
+    originSourceId: "s1",
+  } as CommitmentRecord;
+  const amendment = {
+    ...proposal,
+    operation: "amend" as const,
+    commitmentId: "c1",
+    originSourceId: "s3",
+    deadlineMs: 68400000,
+  };
+  expect(normalizeAgreementReference(amendment, existing)).toEqual({
+    ...amendment,
+    originSourceId: "s1",
+  });
+  expect(
+    normalizeAgreementReference(
+      { ...amendment, commitmentId: "foreign" },
+      existing,
+    ).originSourceId,
+  ).toBe("s3");
+});
+test("calendar normalization uses exact unambiguous clock evidence instead of model arithmetic", () => {
+  expect(
+    normalizeAgreementCalendar(
+      { ...proposal, deadlineMs: 61200000 },
+      sources,
+      "a",
+      2,
+      86400000,
+      null,
+    ).deadlineMs,
+  ).toBe(64800000);
+  expect(() =>
+    normalizeAgreementCalendar(
+      { ...proposal, proposal: { sourceId: "s1", quote: "by 19:00" } },
+      sources,
+      "a",
+      2,
+      86400000,
+      null,
+    ),
+  ).toThrow();
+});
+test("extraction cannot silently erase an explicit deadline or invent a new commitment ID", () => {
+  expect(() =>
+    validateAgreement(
+      { ...proposal, deadlineMs: null },
+      sources,
+      "a",
+      2,
+      86400000,
+      null,
+    ),
+  ).toThrow("deadline");
+  expect(() =>
+    validateAgreement(
+      { ...proposal, commitmentId: "command-id" },
+      sources,
+      "a",
+      2,
+      86400000,
+      null,
+    ),
+  ).toThrow("identity");
+});
 
 test("a routine needs structured applicability and two distinct completed personal jobs", () => {
-  const experiences = [ { ...sources[0]!, kind: "action.completed", result: { jobId: "j1", kind: "work" as const, status: "completed" as const } }, { ...sources[0]!, id: "s3", sequence: 3, result: { jobId: "j2", kind: "work" as const, status: "completed" as const } } ];
-  const routine = { kind: "routine" as const, title: "A possible useful work pattern", text: "This worked twice under these conditions.", entityIds: [], evidence: experiences.map(source => ({sourceId: source.id, quote: source.content})), routine: { parameters: ["target"], steps: ["Inspect the target", "Use an advertised capability"], preconditions: ["Target accessible and inputs available"], limitations: ["Past success does not guarantee current stock"] } };
+  const experiences = [
+    {
+      ...sources[0]!,
+      kind: "action.completed",
+      result: {
+        jobId: "j1",
+        kind: "work" as const,
+        status: "completed" as const,
+      },
+    },
+    {
+      ...sources[0]!,
+      id: "s3",
+      sequence: 3,
+      result: {
+        jobId: "j2",
+        kind: "work" as const,
+        status: "completed" as const,
+      },
+    },
+  ];
+  const routine = {
+    kind: "routine" as const,
+    title: "A possible useful work pattern",
+    text: "This worked twice under these conditions.",
+    entityIds: [],
+    evidence: experiences.map((source) => ({
+      sourceId: source.id,
+      quote: source.content,
+    })),
+    routine: {
+      parameters: ["target"],
+      steps: ["Inspect the target", "Use an advertised capability"],
+      preconditions: ["Target accessible and inputs available"],
+      limitations: ["Past success does not guarantee current stock"],
+    },
+  };
   expect(validateClaim(routine, experiences, "a", 3)).toEqual(["s1", "s3"]);
-  expect(() => validateClaim({...routine, routine: null}, experiences, "a", 3)).toThrow("steps");
-  expect(() => validateClaim(routine, [experiences[0]!, {...experiences[1]!, result: experiences[0]!.result}], "a", 3)).toThrow("distinct");
+  expect(() =>
+    validateClaim({ ...routine, routine: null }, experiences, "a", 3),
+  ).toThrow("steps");
+  expect(() =>
+    validateClaim(
+      routine,
+      [experiences[0]!, { ...experiences[1]!, result: experiences[0]!.result }],
+      "a",
+      3,
+    ),
+  ).toThrow("distinct");
 });
 
 test("tentative, negated, third-party and unaccepted amendments cannot create accepted obligations", () => {
@@ -225,9 +338,38 @@ test("speaker labels do not prevent a real acceptance from being recognized", ()
 });
 
 test("an accepted quantity amendment can resolve a reference to existing terms", () => {
-  const existing = { logicalId: "c1", debtorId: "a", creditorId: "b", resource: "food", amount: 3, deadlineMs: 64800000, originSourceId: "s1", effectiveSequence: 2 } as CommitmentRecord;
-  const changed = [...sources, { ...sources[1]!, id: "s3", sequence: 3, content: "Make it six instead." }, { ...sources[0]!, id: "s4", sequence: 4, content: "Yes, agreed." }];
-  expect(validateAgreement({ ...proposal, operation: "amend", commitmentId: "c1", proposal: { sourceId: "s3", quote: "Make it six instead." }, acceptance: { sourceId: "s4", quote: "Yes, agreed." }, termsEvidence: [{ sourceId: "s3", quote: "Make it six instead." }] }, changed, "a", 4, 86400000, existing).accepted).toBeTrue();
+  const existing = {
+    logicalId: "c1",
+    debtorId: "a",
+    creditorId: "b",
+    resource: "food",
+    amount: 3,
+    deadlineMs: 64800000,
+    originSourceId: "s1",
+    effectiveSequence: 2,
+  } as CommitmentRecord;
+  const changed = [
+    ...sources,
+    { ...sources[1]!, id: "s3", sequence: 3, content: "Make it six instead." },
+    { ...sources[0]!, id: "s4", sequence: 4, content: "Yes, agreed." },
+  ];
+  expect(
+    validateAgreement(
+      {
+        ...proposal,
+        operation: "amend",
+        commitmentId: "c1",
+        proposal: { sourceId: "s3", quote: "Make it six instead." },
+        acceptance: { sourceId: "s4", quote: "Yes, agreed." },
+        termsEvidence: [{ sourceId: "s3", quote: "Make it six instead." }],
+      },
+      changed,
+      "a",
+      4,
+      86400000,
+      existing,
+    ).accepted,
+  ).toBeTrue();
 });
 
 test("retrieval deduplicates repeated evidence while keeping distinct experiences", () => {

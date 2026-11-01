@@ -2,6 +2,7 @@ import OpenAI, { type ClientOptions } from "openai";
 import {
   memoryPolicy,
   memoryExtractionSchema,
+  memoryInterviewSchema,
   type MemoryCallRequest,
   type MemoryCallAnswer,
 } from "@repo/contracts";
@@ -20,6 +21,10 @@ const schema = z.toJSONSchema(memoryExtractionSchema, {
   target: "draft-7",
 }) as Record<string, unknown>;
 delete schema.$schema;
+const interviewSchema = z.toJSONSchema(memoryInterviewSchema, {
+  target: "draft-7",
+}) as Record<string, unknown>;
+delete interviewSchema.$schema;
 export function memoryInputTokens(
   request: Omit<MemoryCallRequest, "inputTokens">,
 ) {
@@ -29,7 +34,7 @@ export function memoryInputTokens(
         JSON.stringify({
           instructions: request.instructions,
           input: request.input,
-          schema,
+          schema: request.kind === "interview" ? interviewSchema : schema,
         }),
       ).length + 128;
 }
@@ -83,9 +88,12 @@ export function createOpenAIMemoryModel(
             text: {
               format: {
                 type: "json_schema",
-                name: "citizen_memory_v1",
+                name:
+                  request.kind === "interview"
+                    ? "citizen_memory_interview_v1"
+                    : "citizen_memory_v1",
                 strict: true,
-                schema,
+                schema: request.kind === "interview" ? interviewSchema : schema,
               },
               verbosity: "low",
             },
@@ -105,7 +113,10 @@ export function createOpenAIMemoryModel(
           error = "Memory model refused or returned no structured output.";
         else {
           try {
-            data = memoryExtractionSchema.parse(JSON.parse(rawText));
+            data =
+              request.kind === "interview"
+                ? memoryInterviewSchema.parse(JSON.parse(rawText))
+                : memoryExtractionSchema.parse(JSON.parse(rawText));
           } catch {
             error = "Memory output did not satisfy the extraction schema.";
           }

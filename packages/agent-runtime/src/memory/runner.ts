@@ -89,7 +89,26 @@ export class MemoryRunner {
         payload.cutoff,
         ids,
       );
+      sources.sort(
+        (a, b) => a.sequence - b.sequence || a.id.localeCompare(b.id),
+      );
       if (!sources.length) return null;
+      const previous =
+        payload.operation === "extract" && selected[0]
+          ? await this.memory.logicalHead(
+              payload.runId,
+              payload.citizenId,
+              payload.cutoff,
+              `summary:${selected[0].logicalId}`,
+            )
+          : null;
+      const newSourceIds = sources
+        .filter(
+          (source) =>
+            memberIds.includes(source.id) &&
+            source.sequence > (previous?.sourceCutoff ?? -1),
+        )
+        .map((source) => source.id);
       const entities = new Set(
         sources.flatMap((source) => [
           ...source.entityIds,
@@ -105,6 +124,7 @@ export class MemoryRunner {
             : extractionInstructions,
         input: JSON.stringify({
           citizenId: payload.citizenId,
+          newSourceIds,
           sourceCutoff: payload.cutoff,
           coverageCutoff,
           dayLengthMs: claim.state.rules.dayLengthMs,

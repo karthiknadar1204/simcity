@@ -180,6 +180,9 @@ export function useWorld() {
     create,
     command,
     seek,
-    returnLive: () => setHistorical(null),
+    returnLive: () => {
+      setHistorical(null);
+      setMessage("Returned to the live world.");
+    },
   };
 }

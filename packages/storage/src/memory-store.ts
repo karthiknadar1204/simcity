@@ -152,6 +152,22 @@ export class MemoryStore {
       .orderBy(asc(memories.sourceCutoff))
       .limit(12);
   }
+  async logicalHead(
+    runId: string,
+    citizenId: string,
+    asOf: number,
+    logicalId: string,
+  ) {
+    const [record] = await this.db
+      .select()
+      .from(memories)
+      .where(
+        and(scope(runId, citizenId, asOf), eq(memories.logicalId, logicalId)),
+      )
+      .orderBy(desc(memories.version))
+      .limit(1);
+    return record ?? null;
+  }
   async pendingSources(runId: string, citizenId: string, asOf: number) {
     const pending = await this.db
       .select({ memory: memories })

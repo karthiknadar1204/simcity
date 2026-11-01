@@ -37,7 +37,12 @@ export interface CompiledContext extends Record<string, unknown> {
     evidence: { id: string; content: string }[];
     initial: unknown[];
     recent: unknown[];
-    pending: { episodes: string[]; sources: unknown[] };
+    pending: {
+      episodes: string[];
+      sources: unknown[];
+      windowLimited: boolean;
+      omittedSources: number;
+    };
   };
 }
 export function jobView(job: ActionJob | null | undefined) {
@@ -132,20 +137,23 @@ export function assembleContext(input: CompilationInput): {
       initial: (initialMemories?.initial ?? []).slice(0, 8),
       recent: (initialMemories?.recent ?? []).slice(0, 12),
       retrieved: chosen,
-      evidence: input.evidence
-        .slice(0, 12)
-        .map((source) => ({
-          id: source.id,
-          actorId: source.actorId,
-          sequence: source.sequence,
-          simTimeMs: source.simTimeMs,
-          content: source.content.slice(0, 600),
-          truncated: source.content.length > 600,
-        })),
+      evidence: input.evidence.slice(0, 12).map((source) => ({
+        id: source.id,
+        actorId: source.actorId,
+        sequence: source.sequence,
+        simTimeMs: source.simTimeMs,
+        content: source.content.slice(0, 600),
+        truncated: source.content.length > 600,
+      })),
       pending: {
         episodes: input.pending.episodes,
-        sources: input.pending.sources
-          .slice(-8)
+        windowLimited:
+          input.pending.episodes.length >= 4 ||
+          input.pending.sources.length > 8,
+        omittedSources: Math.max(0, input.pending.sources.length - 8),
+        sources: [...input.pending.sources]
+          .sort((a, b) => b.sequence - a.sequence)
+          .slice(0, 8)
           .map((source) => ({
             id: source.id,
             actorId: source.actorId,
@@ -190,6 +198,15 @@ export function assembleContext(input: CompilationInput): {
   }
   const selectedIds = context.memories.retrieved.map((item) => item.id),
     selected = new Set(selectedIds);
+  const sourceIds = (items: unknown[]) =>
+    items.flatMap((item) =>
+      item &&
+      typeof item === "object" &&
+      "id" in item &&
+      typeof item.id === "string"
+        ? [item.id]
+        : [],
+    );
   const audit: RetrievalAudit = {
     query: input.retrieval.query,
     mode: input.retrieval.mode,
@@ -207,6 +224,10 @@ export function assembleContext(input: CompilationInput): {
         ...context.memories.retrieved.flatMap((item) => item.sourceIds),
         ...commitments.flatMap((item) => item.sourceIds),
         ...context.memories.evidence.map((item) => item.id),
+        ...input.relatedCommitments.flatMap((item) => item.sourceIds),
+        ...sourceIds(context.memories.initial),
+        ...sourceIds(context.memories.recent),
+        ...sourceIds(context.memories.pending.sources),
       ]),
     ],
     omitted: input.retrieval.candidates

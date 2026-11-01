@@ -89,6 +89,51 @@ export function deadlineFromQuote(
   return day < 0 ? null : day * dayLengthMs + hour * 3600000 + minute * 60000;
 }
 
+export function normalizeAgreementReference(
+  candidate: AgreementCandidate,
+  existing: CommitmentRecord | null,
+): AgreementCandidate {
+  return existing && candidate.commitmentId === existing.logicalId
+    ? { ...candidate, originSourceId: existing.originSourceId }
+    : candidate;
+}
+
+export function normalizeAgreementCalendar(
+  candidate: AgreementCandidate,
+  sources: MemorySource[],
+  citizenId: string,
+  cutoff: number,
+  dayLengthMs: number,
+  existing: CommitmentRecord | null,
+): AgreementCandidate {
+  const [source] = validateQuotes(
+    [candidate.proposal],
+    sources,
+    citizenId,
+    cutoff,
+  );
+  const clocks =
+    candidate.proposal.quote.match(
+      /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b/gi,
+    ) ?? [];
+  if (clocks.length === 1) {
+    const deadline = deadlineFromQuote(
+      candidate.proposal.quote,
+      source!.simTimeMs,
+      dayLengthMs,
+    );
+    if (deadline !== null) return { ...candidate, deadlineMs: deadline };
+  }
+  if (
+    !clocks.length &&
+    candidate.deadlineMs === null &&
+    existing &&
+    (candidate.operation === "amend" || candidate.operation === "cancel")
+  )
+    return { ...candidate, deadlineMs: existing.deadlineMs };
+  return candidate;
+}
+
 export function validateAgreement(
   candidate: AgreementCandidate,
   sources: MemorySource[],
@@ -135,11 +180,22 @@ export function validateAgreement(
   }
   if (
     candidate.commitmentId &&
-    existing &&
-    candidate.commitmentId !== existing.logicalId
+    (!existing || candidate.commitmentId !== existing.logicalId)
   )
     throw new Error("Commitment identity changed.");
   if (candidate.operation !== "cancel") {
+    if (
+      candidate.deadlineMs === null &&
+      (existing?.deadlineMs != null ||
+        candidate.termsEvidence.some((evidence) => {
+          const source = sources.find((item) => item.id === evidence.sourceId)!;
+          return (
+            deadlineFromQuote(evidence.quote, source.simTimeMs, dayLengthMs) !==
+            null
+          );
+        }))
+    )
+      throw new Error("An explicit deadline cannot be silently omitted.");
     const quantitySupported =
       candidate.termsEvidence.some((evidence) => {
         const words = normalizeNumbers(evidence.quote).split(/[^a-z0-9_-]+/);
@@ -156,10 +212,18 @@ export function validateAgreement(
         candidate.amount === existing.amount &&
         candidate.resource === existing.resource,
       ) ||
-      Boolean(existing && candidate.operation === "amend" && candidate.resource === existing.resource && candidate.termsEvidence.some(evidence => {
-        const normalized = normalizeNumbers(evidence.quote);
-        return /\b(make it|instead|quantity|amount)\b/i.test(normalized) && !/\bdeadline\b|\d:\d/i.test(normalized) && normalized.split(/[^a-z0-9_-]+/).includes(String(candidate.amount));
-      })
+      Boolean(
+        existing &&
+        candidate.operation === "amend" &&
+        candidate.resource === existing.resource &&
+        candidate.termsEvidence.some((evidence) => {
+          const normalized = normalizeNumbers(evidence.quote);
+          return (
+            /\b(make it|instead|quantity|amount)\b/i.test(normalized) &&
+            !/\bdeadline\b|\d:\d/i.test(normalized) &&
+            normalized.split(/[^a-z0-9_-]+/).includes(String(candidate.amount))
+          );
+        }),
       );
     if (!quantitySupported)
       throw new Error("Quantity/resource is not supported by exact evidence.");
@@ -236,7 +300,8 @@ export function validateClaim(
   if (candidate.entityIds.some((id) => !allowed.has(id)))
     throw new Error("Claim mentions an unsupported entity.");
   if (candidate.kind === "routine") {
-    if (!candidate.routine) throw new Error("A routine requires steps and applicability fields.");
+    if (!candidate.routine)
+      throw new Error("A routine requires steps and applicability fields.");
     const completions = new Set(
       evidence
         .filter(

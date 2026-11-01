@@ -224,7 +224,9 @@ export async function recordMemories(
     );
     const ownAction =
       "actorId" in result.receipt.action &&
-      result.receipt.action.actorId === citizenId;
+      (result.receipt.action.actorId === citizenId ||
+        (result.receipt.action.kind === "transfer" &&
+          result.receipt.action.targetId === citizenId));
     const source: MemorySource = {
       id: observation.id,
       citizenId,

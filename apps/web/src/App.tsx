@@ -33,7 +33,7 @@ export function App() {
     <main className="app">
       <header>
         <div>
-          <p className="eyebrow">SIMCITY / PHASE 02</p>
+          <p className="eyebrow">SIMCITY / PHASE 03</p>
           <h1>A little world, in motion.</h1>
           <p className="description">
             {agentProvider === "fixture"

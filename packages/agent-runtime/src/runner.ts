@@ -167,6 +167,7 @@ export class AgentRunner {
           ));
         if (!record.outcome)
           await this.agents.saveOutcome(state.runId, guard, round, outcome);
+        broker.rememberOutcome(outcome);
         if (
           answer.call.name === "actions_cancel" &&
           outcome.status === "accepted"

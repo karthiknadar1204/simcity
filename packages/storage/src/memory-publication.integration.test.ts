@@ -246,6 +246,7 @@ live(
       )!;
       const amend: AgreementCandidate = {
         ...proposal,
+        originSourceId: change.id,
         operation: "amend",
         commitmentId: accepted!.logicalId,
         deadlineMs: 68400000,
@@ -289,6 +290,10 @@ live(
           .deadlineMs,
       ).toBe(68400000);
       expect(
+        (await memory.commitments(runId, self.id, secondPublication))[0]!
+          .originSourceId,
+      ).toBe(origin.id);
+      expect(
         (await memory.commitments(runId, self.id, firstPublication))[0]!
           .deadlineMs,
       ).toBe(64800000);
@@ -312,6 +317,70 @@ live(
         (await memory.commitments(runId, self.id, secondPublication))[0]!
           .status,
       ).toBe("accepted");
+      const incomingText = "I will bring four food by 20:00.";
+      await execute({
+        id: "incoming-offer",
+        action: {
+          kind: "say",
+          actorId: peer.id,
+          audienceIds: [self.id],
+          text: incomingText,
+        },
+      });
+      await execute({
+        id: "incoming-acceptance",
+        action: {
+          kind: "say",
+          actorId: self.id,
+          audienceIds: [peer.id],
+          text: "Yes, agreed.",
+        },
+      });
+      const incomingSources = await memory.sources(
+        runId,
+        self.id,
+        (await worlds.current(runId)).state.sequence,
+      );
+      const incomingOffer = incomingSources.find(
+        (source) => source.utterance === incomingText,
+      )!;
+      const incomingAcceptance = incomingSources.find(
+        (source) =>
+          source.utterance === "Yes, agreed." &&
+          source.sequence > incomingOffer.sequence,
+      )!;
+      const incomingPublication = await extract({
+        ...proposal,
+        debtorId: peer.id,
+        creditorId: self.id,
+        amount: 4,
+        deadlineMs: 72000000,
+        originSourceId: incomingOffer.id,
+        proposal: { sourceId: incomingOffer.id, quote: incomingText },
+        acceptance: { sourceId: incomingAcceptance.id, quote: "Yes, agreed." },
+        termsEvidence: [{ sourceId: incomingOffer.id, quote: incomingText }],
+      });
+      const incomingCommitment = (
+        await memory.commitments(runId, self.id, incomingPublication)
+      ).find((item) => item.debtorId === peer.id)!;
+      expect(incomingCommitment.status).toBe("accepted");
+      const received = await execute({
+        id: "receive-fulfillment",
+        action: {
+          kind: "transfer",
+          actorId: peer.id,
+          targetId: self.id,
+          resource: "food",
+          amount: 4,
+        },
+      });
+      expect(received.receipt.status).toBe("accepted");
+      expect(
+        (
+          await memory.commitments(runId, self.id, received.state.sequence)
+        ).find((item) => item.logicalId === incomingCommitment.logicalId)!
+          .status,
+      ).toBe("fulfilled");
       expect(
         await memory.read(
           runId,

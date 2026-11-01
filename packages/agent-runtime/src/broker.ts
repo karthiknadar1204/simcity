@@ -26,6 +26,7 @@ export interface WorldPort {
 }
 export class ToolBroker {
   searches = 0;
+  private observedSources = new Map<string, number>();
   constructor(
     readonly worlds: WorldStore,
     readonly agents: AgentStore,
@@ -36,6 +37,33 @@ export class ToolBroker {
     readonly memory?: MemoryStore,
     readonly queries?: MemoryQueries,
   ) {}
+  rememberOutcome(outcome: ToolOutcome) {
+    const data = outcome.data as
+      | {
+          asOfSequence?: number;
+          observations?: {
+            id: string;
+            citizenId: string;
+            eventSequence: number;
+          }[];
+        }
+      | undefined;
+    if (
+      !data ||
+      !Number.isSafeInteger(data.asOfSequence) ||
+      !Array.isArray(data.observations)
+    )
+      return;
+    for (const source of data.observations)
+      if (
+        typeof source.id === "string" &&
+        source.citizenId === this.guard.citizenId &&
+        Number.isSafeInteger(source.eventSequence) &&
+        source.eventSequence >= 0 &&
+        source.eventSequence <= data.asOfSequence!
+      )
+        this.observedSources.set(source.id, source.eventSequence);
+  }
   async execute(
     name: string,
     input: string,
@@ -65,15 +93,13 @@ export class ToolBroker {
           data: {
             asOfSequence: this.boundary,
             total: places.length,
-            places: places
-              .slice(offset, offset + 20)
-              .map((object) => ({
-                id: object.id,
-                name: object.name,
-                position: object.position,
-                tags: object.tags,
-                accessible: !object.ownerId || object.ownerId === citizenId,
-              })),
+            places: places.slice(offset, offset + 20).map((object) => ({
+              id: object.id,
+              name: object.name,
+              position: object.position,
+              tags: object.tags,
+              accessible: !object.ownerId || object.ownerId === citizenId,
+            })),
             nextOffset: places.length > offset + 20 ? offset + 20 : null,
           },
         };
@@ -206,7 +232,7 @@ export class ToolBroker {
           const found = await this.memory.read(
             runId,
             citizenId,
-            this.boundary,
+            this.observedSources.get(String(args.sourceId)) ?? this.boundary,
             String(args.sourceId),
           );
           if (!found)
@@ -329,6 +355,7 @@ export class ToolBroker {
         for (const sourceId of args.evidenceIds as string[]) {
           const seed = /^seed-(\d+)$/.exec(sourceId);
           if (seed && self.initialMemories[Number(seed[1])]) continue;
+          if (this.observedSources.has(sourceId)) continue;
           if (
             !(this.memory
               ? await this.memory.read(

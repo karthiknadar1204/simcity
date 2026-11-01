@@ -112,3 +112,18 @@ test("essential overflow is explicit rather than silently dropping due obligatio
   data.counts.due = memoryPolicy.maxObligations + 1;
   expect(() => assembleContext(data)).toThrow("obligations");
 });
+test("source coverage includes retained initial, recent and pending evidence", () => {
+  const data = input();
+  data.base.memories = {
+    initial: [{ id: "seed-x", content: "A seed" }],
+    recent: [{ id: "recent-x", content: "Recent observation" }],
+  };
+  data.pending = {
+    episodes: ["pending-episode"],
+    sources: [{ ...data.evidence[0]!, id: "pending-x" }],
+  };
+  const { audit } = assembleContext(data);
+  expect(audit.selectedSourceIds).toContain("seed-x");
+  expect(audit.selectedSourceIds).toContain("recent-x");
+  expect(audit.selectedSourceIds).toContain("pending-x");
+});

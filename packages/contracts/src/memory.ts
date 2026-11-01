@@ -100,7 +100,7 @@ export interface MemoryWorkGuard {
   generation: number;
 }
 export interface MemoryCallRequest {
-  kind: "extract" | "embed" | "consolidate" | "query";
+  kind: "extract" | "embed" | "consolidate" | "query" | "interview";
   model: string;
   instructions: string;
   input: string;
@@ -108,7 +108,7 @@ export interface MemoryCallRequest {
 }
 export interface MemoryCallAnswer {
   model: string;
-  data: MemoryExtraction | number[] | null;
+  data: MemoryExtraction | MemoryInterview | number[] | null;
   inputTokens: number;
   cachedTokens: number;
   outputTokens: number;
@@ -122,14 +122,30 @@ export const evidenceQuoteSchema = z.strictObject({
 });
 export type EvidenceQuote = z.infer<typeof evidenceQuoteSchema>;
 export const agreementCandidateSchema = z.strictObject({
-  operation: z.enum(["propose", "agree", "amend", "cancel"]),
+  operation: z
+    .enum(["propose", "agree", "amend", "cancel"])
+    .describe(
+      "agree for a definite first offer explicitly accepted later by the other party; propose for unaccepted/uncertain offers; amend/cancel for an identified prior agreement",
+    ),
   originSourceId: id,
-  commitmentId: id.nullable(),
+  commitmentId: id
+    .nullable()
+    .describe(
+      "null for a first offer/agreement; for amend/cancel copy the existing commitment logicalId, never a command or receipt ID",
+    ),
   debtorId: id,
   creditorId: id,
   resource: id,
   amount: z.number().int().min(1).max(1000000),
-  deadlineMs: z.number().int().safe().nonnegative().nullable(),
+  deadlineMs: z
+    .number()
+    .int()
+    .safe()
+    .nonnegative()
+    .nullable()
+    .describe(
+      "Absolute simulation milliseconds. For HH:MM use proposal day start + HH*3600000 + MM*60000. Preserve explicit or inherited deadlines; null only when unspecified.",
+    ),
   proposal: evidenceQuoteSchema,
   acceptance: evidenceQuoteSchema.nullable(),
   termsEvidence: z.array(evidenceQuoteSchema).min(1).max(6),
@@ -159,6 +175,20 @@ export const memoryExtractionSchema = z.strictObject({
   claims: z.array(claimCandidateSchema).max(8),
 });
 export type MemoryExtraction = z.infer<typeof memoryExtractionSchema>;
+export const memoryInterviewSchema = z.strictObject({
+  answers: z
+    .array(
+      z.strictObject({
+        questionId: id,
+        value: z.string().max(400).nullable(),
+        answer: z.string().max(600),
+        certainty: z.enum(["known", "unknown"]),
+        sourceIds: z.array(id).max(12),
+      }),
+    )
+    .max(12),
+});
+export type MemoryInterview = z.infer<typeof memoryInterviewSchema>;
 export interface RetrievedMemory {
   memory: MemoryRecord;
   score: number;

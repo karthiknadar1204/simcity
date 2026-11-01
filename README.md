@@ -107,9 +107,9 @@ bun run db:migrate
 bun run db:studio
 ```
 
-Migration `0000` enables pgvector. `0001` creates world/event/observation/receipt/checkpoint/task/outbox/artifact tables. `0002` adds citizen controls, budgets, thinking turns, and model rounds. `0003` adds versioned memory, commitments, indexes, jobs, model-call accounting and context audits, with full-text and HNSW indexes. Migrations never run automatically at API startup.
+Migration `0000` enables pgvector. `0001` creates world/event/observation/receipt/checkpoint/task/outbox/artifact tables. `0002` adds citizen controls, budgets, thinking turns, and model rounds. `0003` adds versioned memory, commitments, indexes, jobs, model-call accounting and context audits, with full-text and HNSW indexes. `0004` adds recording intervals, video exports and historical thinking completion boundaries. Migrations never run automatically at API startup.
 
-The database package uses Drizzle's `neon-serverless` adapter with Neon's WebSocket pool for interactive transactions. Redis is delivery infrastructure; committed PostgreSQL records remain authoritative.
+The database package uses `pg` with Drizzle's `node-postgres` adapter and a verified TLS pool to Neon. Redis delivers work; committed PostgreSQL records remain authoritative.
 
 Production bundles are in each app's `dist`. Backend bundles run from the installed monorepo using `bun run --cwd apps/api start` and `bun run --cwd apps/worker start`. Keep the versioned `experiments` directory and Git metadata available for scenario loading and provenance. Serve frontend assets with an `/api` reverse proxy. Vite's development proxy is not a production proxy. A Phaser bundle-size warning is currently expected; the library is split into its own chunk.
 

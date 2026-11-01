@@ -18,6 +18,22 @@ Verified so far:
 
 The video worker and browser controls have passed their real service checks. The remaining acceptance check is the complete autonomous day.
 
+## How an independent turn works
+
+An encounter, delivered message, completed action or relevant timer requests a decision. PostgreSQL saves a thinking task for that citizen. The actor worker freezes its event boundary and compiles only that person's identity, visible surroundings, job, plan, commitments, retrieved experiences and exact source links.
+
+The OpenAI model chooses a tool. The broker validates its arguments and permissions. The engine then accepts or rejects the real action, and PostgreSQL saves the response and receipt with the same stable command ID. A movement or work job yields to the simulation clock. Its later completion can request another decision. Describing a plan does not perform the work.
+
+For a conversation, `social_start` delivers only the initiator's words. The other citizen gets a separate task and independently chooses `social_reply` or `social_end`. Replies require the recorded conversation ID, version and actual next speaker. The protocol permits eight turns, a two-minute simulation timeout and a five-minute cooldown for an ended pair. Moving out of hearing range or sleeping ends the conversation. `social_say` is a one-off announcement; `social_alert` requires an adjacent person and can wake them.
+
+`time_wait` and `time_sleep` create timed engine jobs. A citizen decides the duration and whether to change its plan. Its personal sleep/wake preference is context and a decision notification, not a forced schedule. Sleep creates a consolidation task over a frozen pre-sleep source cutoff. Raw experiences and promises are already durable before that task finishes. The current consolidation extracts evidence-backed summaries and lessons; the later NEMORI prediction/comparison experiment is not implemented by these phases.
+
+## Final connection checks
+
+The final TLS path also passed a fresh real export on run `c40f4ba0-572f-4502-adfb-2a80c97ecf49`: 60 frames, 1280×720, 30 fps, two seconds and 27,137 MP4 bytes. All three R2 files passed readback verification. Actor and memory request counts remained zero, and source hashes stayed unchanged. The actual browser video decoded at the expected dimensions and duration with no error.
+
+The fresh process-restart fixture `f4788b09-5115-48e5-9587-3bad148ceb1a` also passed on TLS. The world froze during server downtime, all three sleepers woke after recovery, and their three original consolidation cutoffs remained unchanged. This fixture made no model calls and does not replace the independently chosen full-day gate.
+
 ## Recorded video and restart checks
 
 The real export path passed on fixture run `e0183edb-bbcd-49b9-91c6-11386c494b6d`: 60 frames, 1280×720, 30 fps, 2.000 seconds, 26,625 MP4 bytes. The video, PNG thumbnail and JSON manifest passed R2 full readback checks. Source world hashes matched before and after export. Actor calls and memory calls were both zero. The browser loaded the private R2 video through the same-origin API proxy and reported 1280×720, two seconds, no playback error.

@@ -34,6 +34,8 @@ const hedged =
   /\b(maybe|might|possibly|perhaps|tentatively|if|not|cannot|can't|won't|never|refuse|decline)\b/i;
 const affirmative =
   /^(?:yes\b|agreed\b|i agree\b|okay\b|ok\b|accepted\b|sounds good\b|that works\b|we agree\b)/i;
+const spoken = (source: MemorySource) =>
+  source.utterance ?? source.content.replace(/^[^:\n]{1,100}:\s+/, "");
 const smallNumbers = [
   "zero",
   "one",
@@ -153,6 +155,11 @@ export function validateAgreement(
         existing &&
         candidate.amount === existing.amount &&
         candidate.resource === existing.resource,
+      ) ||
+      Boolean(existing && candidate.operation === "amend" && candidate.resource === existing.resource && candidate.termsEvidence.some(evidence => {
+        const normalized = normalizeNumbers(evidence.quote);
+        return /\b(make it|instead|quantity|amount)\b/i.test(normalized) && !/\bdeadline\b|\d:\d/i.test(normalized) && normalized.split(/[^a-z0-9_-]+/).includes(String(candidate.amount));
+      })
       );
     if (!quantitySupported)
       throw new Error("Quantity/resource is not supported by exact evidence.");
@@ -196,9 +203,9 @@ export function validateAgreement(
     candidate.operation !== "propose" &&
     Boolean(
       acceptance &&
-      affirmative.test(candidate.acceptance!.quote.trim()) &&
-      !hedged.test(acceptance.content) &&
-      !hedged.test(proposal.content),
+      affirmative.test(spoken(acceptance).trim()) &&
+      !hedged.test(spoken(acceptance)) &&
+      !hedged.test(spoken(proposal)),
     );
   return {
     accepted,
@@ -229,6 +236,7 @@ export function validateClaim(
   if (candidate.entityIds.some((id) => !allowed.has(id)))
     throw new Error("Claim mentions an unsupported entity.");
   if (candidate.kind === "routine") {
+    if (!candidate.routine) throw new Error("A routine requires steps and applicability fields.");
     const completions = new Set(
       evidence
         .filter(

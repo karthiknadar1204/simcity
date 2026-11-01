@@ -9,11 +9,17 @@ import {
   runs,
 } from "@repo/db/tables";
 import { createArchiveStore } from "@repo/storage";
-import { contentHash, runtimePolicy, agentPolicy } from "@repo/contracts";
+import {
+  contentHash,
+  runtimePolicy,
+  agentPolicy,
+  memoryPolicy,
+} from "@repo/contracts";
 
 export const queueNames = {
   archive: runtimePolicy.archiveQueue,
   cognition: "simcity-cognition",
+  memory: "simcity-memory",
   extraction: "simcity-extraction",
   embeddings: "simcity-embeddings",
   consolidation: "simcity-consolidation",
@@ -64,13 +70,28 @@ export function createThinkingWorker(
   redisUrl: string,
   processTask: (taskId: string) => Promise<void>,
 ) {
-  const worker = new Worker<{ taskId: string }>(
+  return createTaskWorker(
+    redisUrl,
     queueNames.cognition,
+    processTask,
+    agentPolicy.concurrency,
+    agentPolicy.leaseMs,
+  );
+}
+function createTaskWorker(
+  redisUrl: string,
+  queueName: string,
+  processTask: (taskId: string) => Promise<void>,
+  concurrency: number,
+  leaseMs: number,
+) {
+  const worker = new Worker<{ taskId: string }>(
+    queueName,
     (job) => processTask(job.data.taskId),
     {
       connection: { ...connection(redisUrl), maxRetriesPerRequest: null },
-      concurrency: agentPolicy.concurrency,
-      lockDuration: agentPolicy.leaseMs,
+      concurrency,
+      lockDuration: leaseMs,
       stalledInterval: 5000,
       maxStalledCount: 2,
     },
@@ -80,6 +101,25 @@ export function createThinkingWorker(
     console.error(`Thinking delivery ${job?.id ?? "unknown"} failed.`),
   );
   return worker;
+}
+export function createMemoryQueue(
+  redisUrl: string,
+  name: string = queueNames.memory,
+) {
+  return createArchiveQueue(redisUrl, name);
+}
+export function createMemoryWorker(
+  redisUrl: string,
+  processTask: (taskId: string) => Promise<void>,
+  name: string = queueNames.memory,
+) {
+  return createTaskWorker(
+    redisUrl,
+    name,
+    processTask,
+    memoryPolicy.concurrency,
+    memoryPolicy.leaseMs,
+  );
 }
 
 export async function dispatchOutbox(

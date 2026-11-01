@@ -1,6 +1,6 @@
 // Infrastructure timing. Scenario time/physics remain in versioned scenario data.
 export const runtimePolicy = {
-  version: "world-runtime-v3",
+  version: "world-runtime-v4",
   tickIntervalMs: 500,
   discoveryIntervalMs: 5000,
   ownershipLeaseMs: 15000,
@@ -9,6 +9,6 @@ export const runtimePolicy = {
   archiveAttempts: 5,
   archiveConcurrency: 2,
   archiveBackoffMs: 1000,
-  databaseSchema: "drizzle-0002",
+  databaseSchema: "drizzle-0003",
   maxConcurrentTransitionsPerRun: 1,
 } as const;

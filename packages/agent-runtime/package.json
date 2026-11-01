@@ -16,6 +16,7 @@
     "@repo/engine": "workspace:*",
     "@repo/jobs": "workspace:*",
     "@repo/storage": "workspace:*",
+    "@repo/memory": "workspace:*",
     "js-tiktoken": "1.0.21",
     "openai": "7.47.0",
     "zod": "4.6.7"

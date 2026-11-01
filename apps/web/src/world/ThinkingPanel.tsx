@@ -172,7 +172,9 @@ export function ThinkingPanel({
           </ol>
           {turn.context != null && (
             <details>
-              <summary>Context supplied to the model</summary>
+              <summary>
+                Initial compiled context · exact round requests retained in SQL
+              </summary>
               <pre>{JSON.stringify(turn.context, null, 2)}</pre>
             </details>
           )}

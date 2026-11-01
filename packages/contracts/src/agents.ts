@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 export const agentPolicy = {
-  version: "phase2-v3",
+  version: "phase3-v1",
   model: "gpt-5.4-mini-2026-03-17",
-  promptVersion: "citizen-v2",
-  toolVersion: "citizen-tools-v1",
+  promptVersion: "citizen-v3",
+  toolVersion: "citizen-tools-v2",
   contextTokens: 8000,
   maxOutputTokens: 1400,
   maxRounds: 6,
@@ -13,7 +13,7 @@ export const agentPolicy = {
   spendingLimitMicroUsd: 1000000,
   inputMicroUsdPerToken: 0.75,
   outputMicroUsdPerToken: 4.5,
-  concurrency: 2,
+  concurrency: 1,
   leaseMs: 30000,
   timeoutMs: 20000,
   debounceMs: 1000,

@@ -38,6 +38,8 @@ export interface MemorySource {
   kind: string;
   content: string;
   actorId: string | null;
+  utterance?: string;
+  projectIds?: string[];
   participantIds: string[];
   entityIds: string[];
   action?: Action;
@@ -89,6 +91,29 @@ export interface MemoryTaskPayload {
   memoryId: string | null;
   cutoff: number;
   operation: "extract" | "embed" | "consolidate";
+  retryOf?: string;
+  parentTaskId?: string;
+}
+export interface MemoryWorkGuard {
+  taskId: string;
+  ownerId: string;
+  generation: number;
+}
+export interface MemoryCallRequest {
+  kind: "extract" | "embed" | "consolidate" | "query";
+  model: string;
+  instructions: string;
+  input: string;
+  inputTokens: number;
+}
+export interface MemoryCallAnswer {
+  model: string;
+  data: MemoryExtraction | number[] | null;
+  inputTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  error?: string;
+  rawText?: string;
 }
 const id = z.string().min(1).max(160);
 export const evidenceQuoteSchema = z.strictObject({
@@ -116,6 +141,14 @@ export const claimCandidateSchema = z.strictObject({
   text: z.string().min(1).max(1600),
   entityIds: z.array(id).max(12),
   evidence: z.array(evidenceQuoteSchema).min(1).max(8),
+  routine: z
+    .strictObject({
+      parameters: z.array(z.string().max(120)).max(8),
+      steps: z.array(z.string().min(1).max(240)).min(1).max(10),
+      preconditions: z.array(z.string().max(240)).max(8),
+      limitations: z.array(z.string().max(240)).max(8),
+    })
+    .nullable(),
 });
 export type ClaimCandidate = z.infer<typeof claimCandidateSchema>;
 export const memoryExtractionSchema = z.strictObject({

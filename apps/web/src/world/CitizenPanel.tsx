@@ -3,6 +3,7 @@ import type { Action, Citizen, Observation, WorldState } from "@repo/contracts";
 import { parseCommand } from "@repo/contracts";
 import { request } from "../lib/api";
 import { ThinkingPanel } from "./ThinkingPanel";
+import { MemoryPanel } from "./MemoryPanel";
 
 type ObservationsResponse = { observations: Observation[] };
 type Props = {
@@ -114,6 +115,13 @@ export function CitizenPanel({
           traces are hidden.
         </p>
       )}
+      <MemoryPanel
+        key={`${state.runId}-${citizen.id}-${replaying}`}
+        runId={state.runId}
+        citizenId={citizen.id}
+        sequence={state.sequence}
+        replaying={replaying}
+      />
       <div className="needs">
         <span>
           Energy <b>{citizen.needs.energy}/1000</b>

@@ -22,11 +22,15 @@ import {
 } from "@repo/contracts";
 import { episodeKey } from "@repo/memory";
 import type { Transaction } from "./thinking-records";
+import { recordFulfillment } from "./memory-commitments";
 
 export async function queueMemoryTask(
   tx: Transaction,
-  payload: MemoryTaskPayload,
+  input: MemoryTaskPayload,
 ) {
+  const payload = { ...input };
+  if (payload.retryOf === undefined) delete payload.retryOf;
+  if (payload.parentTaskId === undefined) delete payload.parentTaskId;
   const id = `mt-${await contentHash(payload)}`;
   const inserted = await tx
     .insert(backgroundTasks)
@@ -40,15 +44,13 @@ export async function queueMemoryTask(
     .onConflictDoNothing()
     .returning({ id: backgroundTasks.id });
   if (inserted.length) {
-    await tx
-      .insert(memoryTasks)
-      .values({
-        id,
-        citizenId: payload.citizenId,
-        operation: payload.operation,
-        memoryId: payload.memoryId,
-        cutoff: payload.cutoff,
-      });
+    await tx.insert(memoryTasks).values({
+      id,
+      citizenId: payload.citizenId,
+      operation: payload.operation,
+      memoryId: payload.memoryId,
+      cutoff: payload.cutoff,
+    });
     await tx.insert(outbox).values({ taskId: id });
   }
   return id;
@@ -96,26 +98,28 @@ export async function putMemory(
       .set({ supersededSequence: input.availableSequence })
       .where(eq(memories.id, prior.id));
   await tx.insert(memories).values(record);
-  if (input.entityIds.length)
-    await tx
-      .insert(memoryEntities)
-      .values(
-        [...new Set(input.entityIds)].map((entityId) => ({
-          memoryId: record.id,
-          runId: input.runId,
-          citizenId: input.citizenId,
-          entityId,
-        })),
-      );
-  await tx
-    .insert(memoryIndexes)
-    .values({
-      memoryId: record.id,
-      status: "pending",
-      model: memoryPolicy.embeddingModel,
-      dimensions: memoryPolicy.dimensions,
-      textHash,
-    });
+  const indexedEntities = [
+    ...new Set([
+      ...input.entityIds,
+      ...((input.payload.projectIds ?? []) as string[]),
+    ]),
+  ];
+  if (indexedEntities.length)
+    await tx.insert(memoryEntities).values(
+      indexedEntities.map((entityId) => ({
+        memoryId: record.id,
+        runId: input.runId,
+        citizenId: input.citizenId,
+        entityId,
+      })),
+    );
+  await tx.insert(memoryIndexes).values({
+    memoryId: record.id,
+    status: "pending",
+    model: memoryPolicy.embeddingModel,
+    dimensions: memoryPolicy.dimensions,
+    textHash,
+  });
   if (prior)
     await tx
       .insert(memoryEdges)
@@ -229,6 +233,10 @@ export async function recordMemories(
       kind: observation.kind,
       content: observation.content,
       actorId: event.actorId,
+      ...(observation.kind === "speech.delivered" &&
+      result.receipt.action.kind === "say"
+        ? { utterance: result.receipt.action.text }
+        : {}),
       participantIds: [
         ...new Set([
           ...(event.audienceIds ?? [citizenId]),
@@ -250,6 +258,14 @@ export async function recordMemories(
         : {}),
     };
     const key = episodeKey(source);
+    const fulfilled = await recordFulfillment(
+      tx,
+      state.runId,
+      citizenId,
+      source,
+      source.sequence,
+    );
+    source.projectIds = fulfilled.map((id) => `commitment:${id}`);
     const [session] = await tx
       .select({ memory: memories, lastTimeMs: memorySessions.lastTimeMs })
       .from(memorySessions)
@@ -308,17 +324,22 @@ export async function recordMemories(
       eventEndMs: source.simTimeMs,
       sourceCutoff: source.sequence,
       availableSequence: source.sequence,
-      payload: { sources, sessionKey: key, raw: true },
+      payload: {
+        sources,
+        sessionKey: key,
+        raw: true,
+        projectIds: [
+          ...new Set(sources.flatMap((item) => item.projectIds ?? [])),
+        ],
+      },
     });
-    await tx
-      .insert(memoryMembers)
-      .values({
-        runId: state.runId,
-        citizenId,
-        sourceId: source.id,
-        logicalId,
-        sequence: source.sequence,
-      });
+    await tx.insert(memoryMembers).values({
+      runId: state.runId,
+      citizenId,
+      sourceId: source.id,
+      logicalId,
+      sequence: source.sequence,
+    });
     await tx
       .insert(memorySessions)
       .values({

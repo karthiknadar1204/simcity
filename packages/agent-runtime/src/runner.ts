@@ -9,6 +9,9 @@ import {
   type ModelRequest,
 } from "./openai";
 import { ToolBroker, type WorldPort } from "./broker";
+import type { ContextCompiler } from "./memory/compiler";
+import type { MemoryQueries } from "./memory/queries";
+import { boundedRequest } from "./memory/compaction";
 
 export class AgentRunner {
   readonly ownerId = crypto.randomUUID();
@@ -17,6 +20,8 @@ export class AgentRunner {
     readonly agents: AgentStore,
     readonly port: WorldPort,
     readonly model: (id: string) => CitizenModel,
+    readonly compiler?: ContextCompiler,
+    readonly queries?: MemoryQueries,
   ) {}
   async run(taskId: string) {
     const claimed = await this.agents.begin(taskId, this.ownerId);
@@ -41,27 +46,43 @@ export class AgentRunner {
     try {
       let context = turn.context;
       const boundary = turn.boundarySequence ?? state.sequence;
+      const frozen =
+        boundary === state.sequence
+          ? state
+          : await this.worlds.atSequence(state.runId, boundary);
       if (!context) {
-        const evidence = await this.agents.personalEvidence(
-          state.runId,
-          guard.citizenId,
-          state.sequence,
-        );
-        context = buildContext(state, guard.citizenId, evidence, turn.reasons);
-        const memories = context.memories as {
-          recent: unknown[];
-          initial: unknown[];
-        };
-        while (
-          countInput({
-            instructions: citizenInstructions,
-            context: JSON.stringify(context),
-            history: [],
-          }) > agentPolicy.contextTokens &&
-          (memories.recent.length || memories.initial.length > 1)
-        ) {
-          if (memories.recent.length) memories.recent.pop();
-          else memories.initial.pop();
+        if (configuration.memory) {
+          if (!this.compiler)
+            throw new Error("Memory context compiler is unavailable.");
+          context = (await this.compiler.compile(frozen, guard, turn.reasons))
+            .context;
+        } else {
+          const evidence = await this.agents.personalEvidence(
+            state.runId,
+            guard.citizenId,
+            boundary,
+          );
+          context = buildContext(
+            frozen,
+            guard.citizenId,
+            evidence,
+            turn.reasons,
+          );
+          const memories = context.memories as {
+            recent: unknown[];
+            initial: unknown[];
+          };
+          while (
+            countInput({
+              instructions: citizenInstructions,
+              context: JSON.stringify(context),
+              history: [],
+            }) > agentPolicy.contextTokens &&
+            (memories.recent.length || memories.initial.length > 1)
+          ) {
+            if (memories.recent.length) memories.recent.pop();
+            else memories.initial.pop();
+          }
         }
         await this.agents.saveContext(state.runId, guard, context, boundary);
       }
@@ -69,9 +90,11 @@ export class AgentRunner {
         this.worlds,
         this.agents,
         this.port,
-        state,
+        frozen,
         guard,
         boundary,
+        configuration.memory ? this.compiler?.memory : undefined,
+        configuration.memory ? this.queries : undefined,
       );
       const saved = await this.agents.rounds(taskId);
       const history: unknown[] = [];
@@ -82,16 +105,11 @@ export class AgentRunner {
       for (let round = 0; round < agentPolicy.maxRounds; round++) {
         let record = saved.find((row) => row.round === round);
         if (!record) {
-          const requestBase = {
-            instructions: citizenInstructions,
-            context: JSON.stringify(context),
-            history: [...history],
+          const request: ModelRequest = boundedRequest(
+            context,
+            history,
             allowTextOnly,
-          };
-          const request: ModelRequest = {
-            ...requestBase,
-            inputTokens: countInput(requestBase),
-          };
+          );
           record = await this.agents.reserveRound(
             state.runId,
             guard,

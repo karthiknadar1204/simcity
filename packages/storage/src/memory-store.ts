@@ -25,6 +25,8 @@ import {
   memoryStreams,
   contextCompilations,
   queryEmbeddings,
+  memoryTasks,
+  backgroundTasks,
 } from "@repo/db/tables";
 import {
   memoryPolicy,
@@ -40,7 +42,7 @@ import { currentAt } from "@repo/memory";
 export type MemoryRead =
   | { kind: "memory"; memory: MemoryRecord; current: boolean }
   | { kind: "source"; source: MemorySource }
-  | { kind: "commitment"; commitment: CommitmentRecord };
+  | { kind: "commitment"; commitment: CommitmentRecord; current: boolean };
 const scope = (runId: string, citizenId: string, asOf: number) =>
   and(
     eq(memories.runId, runId),
@@ -54,6 +56,56 @@ const scope = (runId: string, citizenId: string, asOf: number) =>
 
 export class MemoryStore {
   constructor(readonly db: Database) {}
+  async inspect(runId: string, citizenId: string, asOf: number, query = "") {
+    const retrieval = query
+      ? await this.search(runId, citizenId, asOf, query)
+      : null;
+    const records = retrieval
+      ? retrieval.candidates.map((item) => item.memory).slice(0, 40)
+      : await this.list(runId, citizenId, asOf);
+    const ids = records.map((item) => item.id);
+    const indexes = ids.length
+      ? await this.db
+          .select()
+          .from(memoryIndexes)
+          .where(inArray(memoryIndexes.memoryId, ids))
+      : [];
+    const [commitments, audits] = await Promise.all([
+      this.commitments(runId, citizenId, asOf, 100),
+      this.db
+        .select()
+        .from(contextCompilations)
+        .where(
+          and(
+            eq(contextCompilations.runId, runId),
+            eq(contextCompilations.citizenId, citizenId),
+            lte(contextCompilations.boundary, asOf),
+          ),
+        )
+        .orderBy(
+          desc(contextCompilations.boundary),
+          desc(contextCompilations.id),
+        )
+        .limit(8),
+    ]);
+    return {
+      records: records.map((memory) => {
+        const index = indexes.find((item) => item.memoryId === memory.id);
+        return {
+          ...memory,
+          indexing:
+            index?.availableSequence !== null &&
+            index?.availableSequence !== undefined &&
+            index.availableSequence <= asOf
+              ? index.status
+              : "pending",
+        };
+      }),
+      commitments,
+      audits,
+      retrieval,
+    };
+  }
   async stream(runId: string, citizenId: string) {
     const [row] = await this.db
       .select()
@@ -79,6 +131,56 @@ export class MemoryStore {
       .where(scope(runId, citizenId, asOf))
       .orderBy(desc(memories.availableSequence), desc(memories.id))
       .limit(Math.min(100, Math.max(1, limit)));
+  }
+  async consolidationBatch(
+    runId: string,
+    citizenId: string,
+    asOf: number,
+    after: number,
+  ) {
+    return this.db
+      .select()
+      .from(memories)
+      .where(
+        and(
+          scope(runId, citizenId, asOf),
+          eq(memories.kind, "episode"),
+          sql`${memories.payload}->>'raw' = 'true'`,
+          gt(memories.sourceCutoff, after),
+        ),
+      )
+      .orderBy(asc(memories.sourceCutoff))
+      .limit(12);
+  }
+  async pendingSources(runId: string, citizenId: string, asOf: number) {
+    const pending = await this.db
+      .select({ memory: memories })
+      .from(memoryTasks)
+      .innerJoin(backgroundTasks, eq(backgroundTasks.id, memoryTasks.id))
+      .innerJoin(memories, eq(memories.id, memoryTasks.memoryId))
+      .where(
+        and(
+          scope(runId, citizenId, asOf),
+          eq(memoryTasks.operation, "extract"),
+          inArray(backgroundTasks.status, [
+            "pending",
+            "queued",
+            "running",
+            "failed",
+          ]),
+        ),
+      )
+      .orderBy(asc(memoryTasks.cutoff))
+      .limit(4);
+    const ids = [
+      ...new Set(pending.flatMap((item) => item.memory.sourceIds)),
+    ].slice(0, 24);
+    return {
+      episodes: pending.map((item) => item.memory.id),
+      sources: ids.length
+        ? await this.sources(runId, citizenId, asOf, ids)
+        : [],
+    };
   }
   async sources(
     runId: string,
@@ -172,6 +274,9 @@ export class MemoryStore {
         kind: observation.kind,
         content: observation.content,
         actorId: row.event.actorId,
+        ...(observation.kind === "speech.delivered" && action?.kind === "say"
+          ? { utterance: action.text }
+          : {}),
         participantIds: [
           ...new Set([
             ...(row.event.audienceIds ?? [citizenId]),
@@ -219,7 +324,12 @@ export class MemoryStore {
         ),
       )
       .limit(1);
-    if (commitment) return { kind: "commitment", commitment };
+    if (commitment)
+      return {
+        kind: "commitment",
+        commitment,
+        current: currentAt(commitment, asOf),
+      };
     const [source] = await this.sources(runId, citizenId, asOf, [id]);
     return source ? { kind: "source", source } : null;
   }
@@ -228,6 +338,7 @@ export class MemoryStore {
     citizenId: string,
     asOf: number,
     limit = memoryPolicy.maxObligations + 1,
+    offset = 0,
   ): Promise<CommitmentRecord[]> {
     return this.db
       .select()
@@ -244,10 +355,12 @@ export class MemoryStore {
         ),
       )
       .orderBy(
+        sql`case when ${commitmentVersions.status} = 'accepted' then 0 else 1 end`,
         sql`${commitmentVersions.deadlineMs} asc nulls last`,
         desc(commitmentVersions.availableSequence),
       )
-      .limit(Math.min(100, limit));
+      .limit(Math.min(100, Math.max(1, limit)))
+      .offset(Math.max(0, offset));
   }
   async recentActions(runId: string, citizenId: string, asOf: number) {
     return this.db
@@ -263,6 +376,55 @@ export class MemoryStore {
       )
       .orderBy(sql`(${commands.receipt}->>'eventSequence')::bigint desc`)
       .limit(memoryPolicy.maxRecentActions);
+  }
+  async commitmentsByLogicalIds(
+    runId: string,
+    citizenId: string,
+    asOf: number,
+    ids: string[],
+  ) {
+    if (!ids.length) return [] as CommitmentRecord[];
+    return this.db
+      .select()
+      .from(commitmentVersions)
+      .where(
+        and(
+          eq(commitmentVersions.runId, runId),
+          eq(commitmentVersions.citizenId, citizenId),
+          inArray(commitmentVersions.logicalId, [...new Set(ids)].slice(0, 12)),
+          lte(commitmentVersions.availableSequence, asOf),
+          or(
+            isNull(commitmentVersions.supersededSequence),
+            gt(commitmentVersions.supersededSequence, asOf),
+          ),
+        ),
+      )
+      .limit(12);
+  }
+  async obligationCounts(
+    runId: string,
+    citizenId: string,
+    asOf: number,
+    simTimeMs: number,
+  ) {
+    const [counts] = await this.db
+      .select({
+        accepted: sql<number>`count(*) filter (where ${commitmentVersions.status} = 'accepted')::int`,
+        due: sql<number>`count(*) filter (where ${commitmentVersions.status} = 'accepted' and ${commitmentVersions.deadlineMs} <= ${simTimeMs})::int`,
+      })
+      .from(commitmentVersions)
+      .where(
+        and(
+          eq(commitmentVersions.runId, runId),
+          eq(commitmentVersions.citizenId, citizenId),
+          lte(commitmentVersions.availableSequence, asOf),
+          or(
+            isNull(commitmentVersions.supersededSequence),
+            gt(commitmentVersions.supersededSequence, asOf),
+          ),
+        ),
+      );
+    return counts ?? { accepted: 0, due: 0 };
   }
   async search(
     runId: string,
@@ -306,6 +468,7 @@ export class MemoryStore {
         ),
     ]);
     const ranked = new Map<string, RetrievedMemory>();
+    let usedVector = false;
     const add = (items: MemoryRecord[], channel: string, weight = 1) =>
       items.forEach((memory, index) => {
         const prior = ranked.get(memory.id) ?? {
@@ -344,6 +507,7 @@ export class MemoryStore {
         semantic.map((item) => item.memory),
         "vector",
       );
+      usedVector = semantic.length > 0;
     }
     if (entities.length) {
       const entityMatches = await this.db
@@ -386,6 +550,8 @@ export class MemoryStore {
               inArray(memoryEdges.fromId, seedIds),
               inArray(memoryEdges.toId, seedIds),
             ),
+            sql`exists (select 1 from sim_memories mf where mf.id = ${memoryEdges.fromId} and mf.run_id = ${runId} and mf.citizen_id = ${citizenId} and mf.available_sequence <= ${asOf})`,
+            sql`exists (select 1 from sim_memories mt where mt.id = ${memoryEdges.toId} and mt.run_id = ${runId} and mt.citizen_id = ${citizenId} and mt.available_sequence <= ${asOf})`,
           ),
         )
         .limit(memoryPolicy.maxLinks);
@@ -418,14 +584,16 @@ export class MemoryStore {
       query,
       asOf,
       candidates,
-      mode: vector ? "hybrid" : "text",
+      mode: usedVector ? "hybrid" : "text",
       pendingIndexes: pending[0]?.count ?? 0,
       sourceIds: [
         ...new Set(candidates.flatMap((item) => item.memory.sourceIds)),
       ],
-      fallback: vector
+      fallback: usedVector
         ? null
-        : "No query embedding; scoped text, entity, link and recent retrieval remain available.",
+        : vector
+          ? "No compatible vector index at this boundary; scoped text fallback was used."
+          : "No query embedding; scoped text, entity, link and recent retrieval remain available.",
     };
   }
   async saveAudit(

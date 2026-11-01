@@ -7,7 +7,15 @@ import {
   type WorldState,
 } from "@repo/contracts";
 import { citizenView } from "@repo/engine";
-import { AgentStore, ThinkingError, type WorldStore } from "@repo/storage";
+import {
+  AgentStore,
+  ThinkingError,
+  type WorldStore,
+  type MemoryStore,
+} from "@repo/storage";
+import type { MemoryQueries } from "./memory/queries";
+import { jobView } from "./memory/compiler";
+import { diverseMemories } from "@repo/memory";
 import { actionFor, parseTool } from "./tools";
 export interface WorldPort {
   execute(
@@ -25,6 +33,8 @@ export class ToolBroker {
     readonly world: WorldState,
     readonly guard: AgentGuard,
     readonly boundary: number,
+    readonly memory?: MemoryStore,
+    readonly queries?: MemoryQueries,
   ) {}
   async execute(
     name: string,
@@ -36,10 +46,135 @@ export class ToolBroker {
       const runId = this.world.runId,
         citizenId = this.guard.citizenId;
       const self = this.world.citizens[citizenId]!;
+      if (tool === "world_find_places") {
+        const visible = new Set(
+          citizenView(this.world, citizenId).objects.map((object) => object.id),
+        );
+        const query = String(args.query).toLowerCase(),
+          offset = Number(args.offset);
+        const places = Object.values(this.world.objects).filter(
+          (object) =>
+            (self.knownEntityIds.includes(object.id) ||
+              visible.has(object.id)) &&
+            `${object.id} ${object.name} ${object.tags.join(" ")}`
+              .toLowerCase()
+              .includes(query),
+        );
+        return {
+          status: "ok",
+          data: {
+            asOfSequence: this.boundary,
+            total: places.length,
+            places: places
+              .slice(offset, offset + 20)
+              .map((object) => ({
+                id: object.id,
+                name: object.name,
+                position: object.position,
+                tags: object.tags,
+                accessible: !object.ownerId || object.ownerId === citizenId,
+              })),
+            nextOffset: places.length > offset + 20 ? offset + 20 : null,
+          },
+        };
+      }
+      if (tool === "commitments_list")
+        return this.memory
+          ? {
+              status: "ok",
+              data: {
+                asOfSequence: this.boundary,
+                offset: args.offset,
+                pageSize: 12,
+                commitments: await this.memory.commitments(
+                  runId,
+                  citizenId,
+                  this.boundary,
+                  12,
+                  Number(args.offset),
+                ),
+              },
+            }
+          : {
+              status: "unavailable",
+              reason: "This legacy run has no extracted commitment ledger.",
+            };
       if (tool === "memory_search") {
         if (++this.searches > 2)
           return { status: "rejected", reason: "Memory search limit reached." };
         const query = String(args.query).toLowerCase();
+        if (this.memory && this.queries) {
+          const result = await this.queries.search(
+            runId,
+            citizenId,
+            this.boundary,
+            query,
+            this.guard,
+          );
+          const selected = diverseMemories(result.candidates, 8);
+          await this.memory.saveAudit(
+            `ctx-${this.guard.taskId}-search-${this.searches}`,
+            this.guard.taskId,
+            runId,
+            citizenId,
+            this.boundary,
+            {
+              query,
+              mode: result.mode,
+              fallback: result.fallback,
+              pendingIndexes: result.pendingIndexes,
+              candidates: result.candidates.map((item) => ({
+                id: item.memory.id,
+                score: item.score,
+                channels: item.channels,
+                sourceIds: item.memory.sourceIds,
+              })),
+              selectedIds: selected.map((item) => item.memory.id),
+              selectedSourceIds: [
+                ...new Set(selected.flatMap((item) => item.memory.sourceIds)),
+              ],
+              omitted: result.candidates
+                .filter((item) => !selected.includes(item))
+                .map((item) => ({
+                  id: item.memory.id,
+                  reason: "redundant evidence or tool result limit",
+                })),
+              tokens: {},
+            },
+          );
+          const related = await this.memory.commitmentsByLogicalIds(
+            runId,
+            citizenId,
+            this.boundary,
+            selected.flatMap((item) =>
+              typeof item.memory.payload.commitmentId === "string"
+                ? [item.memory.payload.commitmentId]
+                : [],
+            ),
+          );
+          return {
+            status: "ok",
+            data: {
+              asOfSequence: this.boundary,
+              mode: result.mode,
+              fallback: result.fallback,
+              pendingIndexes: result.pendingIndexes,
+              relatedCommitmentState: related,
+              memories: selected.map(({ memory, channels }) => ({
+                id: memory.id,
+                kind: memory.kind,
+                certainty: memory.certainty,
+                text: memory.text.slice(0, 800),
+                truncated: memory.text.length > 800,
+                sourceIds: memory.sourceIds,
+                eventEndMs: memory.eventEndMs,
+                availableSequence: memory.availableSequence,
+                historicalExperience: true,
+                channels,
+              })),
+            },
+          };
+        }
         const words = query.match(/[\p{L}\p{N}]+/gu) ?? [];
         const seeds = self.initialMemories
           .map((content, index) => ({
@@ -67,6 +202,36 @@ export class ToolBroker {
         };
       }
       if (tool === "memory_read") {
+        if (this.memory) {
+          const found = await this.memory.read(
+            runId,
+            citizenId,
+            this.boundary,
+            String(args.sourceId),
+          );
+          if (!found)
+            return {
+              status: "unavailable",
+              reason: "No accessible personal source at this boundary.",
+            };
+          if (found.kind === "memory")
+            return {
+              status: "ok",
+              data: {
+                kind: found.kind,
+                current: found.current,
+                id: found.memory.id,
+                title: found.memory.title,
+                text: found.memory.text.slice(0, 2400),
+                truncated: found.memory.text.length > 2400,
+                certainty: found.memory.certainty,
+                sourceIds: found.memory.sourceIds,
+                eventEndMs: found.memory.eventEndMs,
+                availableSequence: found.memory.availableSequence,
+              },
+            };
+          return { status: "ok", data: found };
+        }
         const sourceId = String(args.sourceId),
           seed = /^seed-(\d+)$/.exec(sourceId);
         const content = seed
@@ -111,6 +276,21 @@ export class ToolBroker {
                 status: "ok",
                 data: {
                   object,
+                  dedicatedSleepTool:
+                    object.tags.includes("bed") &&
+                    (!state.objects[object.id]!.ownerId ||
+                      state.objects[object.id]!.ownerId === citizenId)
+                      ? "time_sleep"
+                      : null,
+                  standingOnTarget:
+                    object.position.x === view.self.position.x &&
+                    object.position.y === view.self.position.y,
+                  visibleOccupantId:
+                    view.citizens.find(
+                      (citizen) =>
+                        citizen.position.x === object.position.x &&
+                        citizen.position.y === object.position.y,
+                    )?.id ?? null,
                   asOfSequence: state.sequence,
                   simTimeMs: state.simTimeMs,
                 },
@@ -125,7 +305,7 @@ export class ToolBroker {
           return {
             status: "ok",
             data: view.self.actionId
-              ? state.jobs[view.self.actionId]
+              ? jobView(state.jobs[view.self.actionId])
               : { activity: "idle" },
           };
         return {
@@ -150,12 +330,19 @@ export class ToolBroker {
           const seed = /^seed-(\d+)$/.exec(sourceId);
           if (seed && self.initialMemories[Number(seed[1])]) continue;
           if (
-            !(await this.agents.readEvidence(
-              runId,
-              citizenId,
-              this.boundary,
-              sourceId,
-            ))
+            !(this.memory
+              ? await this.memory.read(
+                  runId,
+                  citizenId,
+                  this.boundary,
+                  sourceId,
+                )
+              : await this.agents.readEvidence(
+                  runId,
+                  citizenId,
+                  this.boundary,
+                  sourceId,
+                ))
           )
             return {
               status: "rejected",
@@ -200,7 +387,7 @@ export class ToolBroker {
             needs: citizen.needs,
           },
           planVersion: citizen.plan?.version ?? 0,
-          job,
+          job: jobView(job),
           observations: personal,
         },
       };

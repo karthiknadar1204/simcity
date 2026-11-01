@@ -1,0 +1,9 @@
+{
+  "id": "phase-3-memory-context",
+  "version": 1,
+  "description": "Personal evidence, bounded episodes, versioned accepted commitments, hybrid retrieval and simple sleep consolidation. One autonomous resident; others remain operator controlled.",
+  "memoryVariant": "episodic-hybrid-v1",
+  "gates": ["accepted-promise-survives-distraction", "unaccepted-amendment-is-pending", "accepted-amendment-preserves-history", "current-state-is-not-historical-stock", "private-and-future-sources-unavailable", "retrieval-and-final-context-audited", "sleep-consolidation-fixed-cutoff", "sql-recovery-and-exact-replay"],
+  "limits": { "runMicroUsd": 1000000, "modelRequests": 80, "actorConcurrency": 1, "memoryConcurrency": 1, "contextTokens": 8000, "embeddingDimensions": 512 },
+  "evaluation": "Deterministic provider fixtures prove mechanics separately from opt-in paid OpenAI probes. Full Nemori prediction, multi-citizen autonomy and paper-scale evaluations remain later phases."
+}

@@ -81,7 +81,18 @@ export class WorldStore {
       clockPolicy: "freeze-during-downtime",
       actorMode: agent ? "autonomous" : "operator-fixture",
       ...(agent ? { agent, agentRuntime: agentPolicy } : {}),
-      modelRoles: agent ? { actor: agent.model } : {},
+      modelRoles: agent
+        ? {
+            actor: agent.model,
+            ...(agent.memory
+              ? {
+                  extraction: memoryPolicy.extractionModel,
+                  consolidation: memoryPolicy.extractionModel,
+                  embeddings: memoryPolicy.embeddingModel,
+                }
+              : {}),
+          }
+        : {},
       promptVersion: agent ? agentPolicy.promptVersion : null,
       toolVersion: agent ? agentPolicy.toolVersion : "commands-v1",
       memoryVariant: agent?.memory ? memoryPolicy.variant : "observations-only",

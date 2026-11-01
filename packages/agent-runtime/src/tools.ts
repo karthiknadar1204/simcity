@@ -15,6 +15,14 @@ const definitions = {
       "Read your permitted surroundings, needs, inventory and current activity.",
     schema: z.strictObject({}),
   },
+  world_find_places: {
+    description:
+      "Find places you already know by name, ID or tag. Paginated map knowledge only; does not reveal remote stock or occupants.",
+    schema: z.strictObject({
+      query: z.string().max(200),
+      offset: whole.max(1000),
+    }),
+  },
   world_inspect: {
     description:
       "Inspect a visible target. Detailed stock requires nearby permitted access.",
@@ -86,13 +94,18 @@ const definitions = {
   },
   memory_search: {
     description:
-      "Search your own initial memories and delivered observations at this turn's recorded boundary. Maximum two searches.",
+      "Search your personal episodes, qualified interpretations and source links at this turn's boundary. Hybrid retrieval when indexes are ready, text fallback otherwise. Maximum two searches.",
     schema: z.strictObject({ query: z.string().min(1).max(200) }),
   },
   memory_read: {
     description:
       "Open an exact personal source ID. Another citizen's or a future source is unavailable.",
     schema: z.strictObject({ sourceId: id }),
+  },
+  commitments_list: {
+    description:
+      "Read current accepted, cancelled or fulfilled personal commitments at this turn's boundary, in pages. Proposals do not replace accepted terms.",
+    schema: z.strictObject({ offset: whole.max(10000) }),
   },
   plans_update: {
     description:

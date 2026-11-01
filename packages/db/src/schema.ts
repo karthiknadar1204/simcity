@@ -26,7 +26,8 @@ import type {
   MemoryKind,
   MemoryCertainty,
   MemoryTaskPayload,
-  MemoryExtraction,
+  MemoryCallRequest,
+  MemoryCallAnswer,
 } from "@repo/contracts";
 
 export const runs = pgTable(
@@ -496,19 +497,6 @@ export const memoryTasks = pgTable(
   (t) => [index("sim_memory_tasks_owner_idx").on(t.citizenId, t.leaseUntil)],
 );
 
-export interface MemoryCallRequest {
-  kind: "extract" | "embed" | "consolidate" | "query";
-  model: string;
-  input: string;
-  inputTokens: number;
-}
-export interface MemoryCallAnswer {
-  model: string;
-  data: MemoryExtraction | number[];
-  inputTokens: number;
-  cachedTokens: number;
-  outputTokens: number;
-}
 export const memoryCalls = pgTable(
   "sim_memory_calls",
   {

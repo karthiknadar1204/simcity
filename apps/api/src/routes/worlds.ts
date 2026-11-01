@@ -15,6 +15,8 @@ import {
   ThinkingError,
   type WorldStore,
   type AgentStore,
+  type MemoryStore,
+  type MemoryWorkStore,
 } from "@repo/storage";
 import type { Coordinator } from "../world/coordinator";
 import { loadScenarios } from "../services/scenarios";
@@ -35,7 +37,13 @@ function integer(
 export function worldRoutes(
   store: WorldStore | null,
   coordinator: Coordinator | null,
-  cognition?: { agents: AgentStore; ready: boolean; defaultModel: string },
+  cognition?: {
+    agents: AgentStore;
+    ready: boolean;
+    defaultModel: string;
+    memory?: MemoryStore;
+    memoryWork?: MemoryWorkStore;
+  },
 ) {
   const app = new Hono();
   const service = () => {
@@ -141,10 +149,11 @@ export function worldRoutes(
         model: cognition.defaultModel,
         spendingLimitMicroUsd: agentPolicy.spendingLimitMicroUsd,
         maxRequests: agentPolicy.maxRequests,
+        memory: true,
       };
     }
     const { revision, provenance } = await runProvenance(
-      body.autonomous ? "phase-2" : "baseline",
+      body.autonomous ? "phase-3" : "baseline",
     );
     return c.json(
       await service().store.create(scenario, revision, provenance, agent),
@@ -161,6 +170,70 @@ export function worldRoutes(
       ),
     });
   });
+  app.get("/runs/:id/citizens/:citizenId/memories", async (c) => {
+    const { state, manifest } = await service().store.current(
+      c.req.param("id"),
+    );
+    const citizenId = c.req.param("citizenId");
+    if (!state.citizens[citizenId])
+      throw new StoreError("Citizen not found.", 404);
+    if (!cognition?.memory)
+      throw new StoreError("Memory store is not configured.", 503);
+    const asOf = integer(c.req.query("asOf"), state.sequence, state.sequence);
+    const query = (c.req.query("q") ?? "").slice(0, 200);
+    return c.json({
+      variant: manifest.memoryVariant,
+      asOf,
+      ...(await cognition.memory.inspect(state.runId, citizenId, asOf, query)),
+      jobs:
+        asOf === state.sequence
+          ? ((await cognition.memoryWork?.status(state.runId, citizenId)) ?? [])
+          : [],
+    });
+  });
+  app.get("/runs/:id/citizens/:citizenId/memories/:sourceId", async (c) => {
+    const { state } = await service().store.current(c.req.param("id"));
+    if (!state.citizens[c.req.param("citizenId")])
+      throw new StoreError("Citizen not found.", 404);
+    const asOf = integer(c.req.query("asOf"), state.sequence, state.sequence);
+    const source = await cognition?.memory?.read(
+      state.runId,
+      c.req.param("citizenId"),
+      asOf,
+      c.req.param("sourceId"),
+    );
+    if (!source)
+      throw new StoreError(
+        "No accessible personal memory at this boundary.",
+        404,
+      );
+    return c.json(source);
+  });
+  app.post(
+    "/runs/:id/citizens/:citizenId/memory-jobs/:taskId/retry",
+    async (c) => {
+      if (!cognition?.ready || !cognition.memoryWork)
+        throw new StoreError("Memory runtime is not configured.", 503);
+      const jobs = await cognition.memoryWork.status(
+        c.req.param("id"),
+        c.req.param("citizenId"),
+      );
+      if (
+        !jobs.some(
+          (job) =>
+            job.task.id === c.req.param("taskId") && job.status === "failed",
+        )
+      )
+        throw new StoreError(
+          "Failed memory task not found for this citizen.",
+          404,
+        );
+      return c.json({
+        taskId: await cognition.memoryWork.retry(c.req.param("taskId")),
+        status: "scheduled",
+      });
+    },
+  );
   app.post("/runs/:id/citizens/:citizenId/retry", async (c) => {
     if (!cognition?.ready)
       throw new StoreError("Autonomous runtime is not configured.", 503);

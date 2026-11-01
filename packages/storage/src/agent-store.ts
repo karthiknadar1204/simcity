@@ -183,6 +183,12 @@ export class AgentStore {
     await this.db.transaction(async (tx) => {
       const run = await this.lockRun(tx, runId);
       await assertThinkingGuard(tx, run.state, guard);
+      const [turn] = await tx
+        .select({ boundary: thinkingTurns.boundarySequence })
+        .from(thinkingTurns)
+        .where(eq(thinkingTurns.id, guard.taskId));
+      if (!turn || turn.boundary !== sequence || sequence > run.sequence)
+        throw new ThinkingError("stale", "Thinking context boundary changed.");
       await tx
         .update(thinkingTurns)
         .set({ context, boundarySequence: sequence })

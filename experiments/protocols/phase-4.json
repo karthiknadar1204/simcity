@@ -12,5 +12,7 @@
     "sleep-restart-continuity"
   ],
   "maxPilotMicroUsd": 1500000,
-  "limitations": "Development pilot, not paper-scale or held-out evidence. Seeded biography and rhythm preferences are declared initial conditions."
+  "limitations": "Development pilot, not paper-scale or held-out evidence. Seeded biography and rhythm preferences are declared initial conditions.",
+  "scenarios": ["town-day-v1", "town-day-v2"],
+  "scenarioChanges": "v2 uses plausible long work batches, meal durations and a public resting affordance. They are initial conditions, not scripted actions. v1 failures remain recorded."
 }

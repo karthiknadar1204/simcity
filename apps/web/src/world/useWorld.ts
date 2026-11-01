@@ -154,6 +154,7 @@ export function useWorld() {
           ? new Playback(snapshotBundle(live)).frameAt(live.simTimeMs)
           : null));
   function selectRun(id: string) {
+    setMessage("Loading saved run…");
     seekVersion.current++;
     setManifest(null);
     setLive(null);

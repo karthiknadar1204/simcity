@@ -241,7 +241,7 @@ export class AgentStore {
         .where(eq(agentBudgets.runId, runId))
         .for("update");
       const reserved = Math.ceil(
-        (agentPolicy.contextTokens + 256) * agentPolicy.inputMicroUsdPerToken +
+        (request.inputTokens + 256) * agentPolicy.inputMicroUsdPerToken +
           agentPolicy.maxOutputTokens * agentPolicy.outputMicroUsdPerToken,
       );
       if (

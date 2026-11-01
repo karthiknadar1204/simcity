@@ -92,6 +92,7 @@ export class MediaRuntime {
     );
   }
   async start() {
+    await this.queue.setGlobalConcurrency(1);
     await this.worker.waitUntilReady();
     await this.dispatch();
     this.timer = setInterval(() => {

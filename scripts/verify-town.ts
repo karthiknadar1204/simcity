@@ -27,7 +27,7 @@ import {
   type WorldState,
 } from "../packages/contracts/src";
 import { runProvenance } from "../apps/api/src/services/run-provenance";
-import scenario from "../experiments/scenarios/dev/town-day.json";
+import scenario from "../experiments/scenarios/dev/town-day-v2.json";
 import { retryDatabase } from "./lib/database";
 if (process.env.RUN_MODEL_TESTS !== "1")
   throw new Error("Set RUN_MODEL_TESTS=1 for this capped paid town pilot.");
@@ -45,6 +45,13 @@ const memoryModel = createOpenAIMemoryModel(key),
   memRunner = new MemoryRunner(memory, work, memoryModel);
 let runId = "",
   steps = 0;
+let stopping = false;
+process.once("SIGINT", () => {
+  stopping = true;
+});
+process.once("SIGTERM", () => {
+  stopping = true;
+});
 const identities = new Set<string>();
 const decisions: {
   citizenId: string;
@@ -57,7 +64,7 @@ const report: Record<string, unknown> = {
   startedAt: new Date().toISOString(),
   scriptedCitizenActions: false,
   initialConditions:
-    "Versioned town-day-v1: morning public-square positions, private biography/motivations and 22:00/07:00 rhythm preferences. Work durations and kitchen capabilities are scenario data.",
+    "Versioned town-day-v2: morning public-square positions, private biography/motivations and 22:00/07:00 rhythm preferences. Long work batches, meal durations, public resting capability and kitchen resources are declared scenario data. No citizen action sequence is supplied.",
 };
 const execute = async (id: string, command: Command, guard?: AgentGuard) =>
   retryDatabase(async () =>
@@ -131,7 +138,12 @@ async function advance(state: WorldState) {
   });
 }
 try {
-  const input = parseScenario(scenario);
+  const input = parseScenario(
+    process.env.RESUME_RUN_ID
+      ? await worlds.scenario(process.env.RESUME_RUN_ID)
+      : scenario,
+  );
+  report.scenarioId = input.id;
   const { revision, provenance } = await runProvenance("phase-4");
   const configurations = input.citizens.map((citizen) => ({
     provider: "openai" as const,
@@ -144,6 +156,7 @@ try {
   if (process.env.RESUME_RUN_ID) {
     runId = process.env.RESUME_RUN_ID;
     const prior = await Bun.file(`.local/town-pilot-${runId}.json`).json();
+    report.initialConditions = prior.initialConditions;
     report.previousAttempt = {
       status: prior.status,
       error: prior.error,
@@ -168,7 +181,7 @@ try {
   console.log(`Live town ${runId}, total cap $1.50 / 2000 model operations.`);
   await command({ kind: "set-status", status: "running" });
   const end = input.startTimeMs + input.rules.dayLengthMs + 3600000;
-  while (steps++ < 1800) {
+  while (!stopping && steps++ < 1800) {
     let state = (await retryDatabase(() => worlds.current(runId))).state;
     assert.equal(
       state.status,
@@ -211,6 +224,21 @@ try {
       memory.list(runId, citizen.id, state.sequence),
     ),
   );
+  const recorded = [];
+  let cursor = 0;
+  while (cursor < state.sequence) {
+    const rows = await worlds.history(runId, cursor, 500);
+    if (!rows.length) break;
+    recorded.push(...rows);
+    cursor = rows[rows.length - 1]!.sequence;
+  }
+  const planMemories = recorded
+    .filter((event) => event.kind === "plan.updated")
+    .flatMap((event) =>
+      Object.values(event.patch.citizens ?? {}).flatMap(
+        (citizen) => citizen.plan?.evidenceIds ?? [],
+      ),
+    );
   const gates = {
     threeIndependentContexts: identities.size === 3,
     dayElapsed: state.simTimeMs - input.startTimeMs >= input.rules.dayLengthMs,
@@ -220,9 +248,7 @@ try {
     citizenInitiatedConversation: conversations.some(
       (item) => item.turns.length >= 2,
     ),
-    memoryInformedChoice: Object.values(state.citizens).some((citizen) =>
-      citizen.plan?.evidenceIds.some((id) => !id.startsWith("seed-")),
-    ),
+    memoryInformedChoice: planMemories.some((id) => !id.startsWith("seed-")),
     revisedPlan: Object.values(state.citizens).some(
       (citizen) => (citizen.plan?.version ?? 0) > 1,
     ),

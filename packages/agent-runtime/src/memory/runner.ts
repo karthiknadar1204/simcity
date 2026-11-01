@@ -167,6 +167,7 @@ export class MemoryRunner {
     const abort = new AbortController();
     let renewing = false,
       inFlight = false;
+    let leaseConfirmedAt = Date.now();
     const timer = setInterval(() => {
       if (renewing) return;
       renewing = true;
@@ -174,9 +175,12 @@ export class MemoryRunner {
         .heartbeat(guard)
         .then((valid) => {
           if (!valid) abort.abort();
-          else leaseConfirmedAt=Date.now();
+          else leaseConfirmedAt = Date.now();
         })
-        .catch(() => {if(Date.now()-leaseConfirmedAt>=memoryPolicy.leaseMs-5000)abort.abort()})
+        .catch(() => {
+          if (Date.now() - leaseConfirmedAt >= memoryPolicy.leaseMs - 5000)
+            abort.abort();
+        })
         .finally(() => {
           renewing = false;
         });

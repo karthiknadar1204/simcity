@@ -1,9 +1,12 @@
-import { Pool, type PoolClient } from "@neondatabase/serverless";
+import WebSocket from "ws";
+import { Pool, neonConfig, type PoolClient } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema";
 
 export { sql } from "drizzle-orm";
 export type Database = ReturnType<typeof createDatabase>["db"];
+
+neonConfig.webSocketConstructor = WebSocket;
 
 export function createDatabase(
   databaseUrl: string,

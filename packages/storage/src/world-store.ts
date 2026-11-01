@@ -308,6 +308,16 @@ export class WorldStore {
     });
   }
 
+  async scenario(runId: string): Promise<Scenario> {
+    const [row] = await this.db
+      .select({ scenario: runs.scenario })
+      .from(runs)
+      .where(eq(runs.id, runId))
+      .limit(1);
+    if (!row) throw new StoreError("World not found.", 404);
+    return row.scenario;
+  }
+
   async current(runId: string): Promise<StoredWorld> {
     const [row] = await this.db
       .select({

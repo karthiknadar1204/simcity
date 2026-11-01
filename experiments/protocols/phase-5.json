@@ -1,0 +1,23 @@
+{
+  "id": "recorded-scene-and-video-v1",
+  "version": 1,
+  "description": "Read-only seek, inspection, verified archives and deterministic-time video capture from an actual recorded interval.",
+  "gates": [
+    "time-seek-reconstructs-recorded-state",
+    "only-committed-walking-steps-are-interpolated",
+    "historical-memory-and-thinking-boundaries",
+    "r2-full-readback-before-manifest-publication",
+    "720p-30fps-actual-encoded-clip",
+    "frozen-source-world-hash-unchanged",
+    "zero-new-actor-or-memory-model-calls"
+  ],
+  "video": {
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "maxOutputSeconds": 30,
+    "maxSimulationMs": 3600000,
+    "camera": "fixed and recorded in export manifest"
+  },
+  "limitations": "Controlled mechanic fixture, not research results or autonomous behavior evidence. Hot PostgreSQL data is retained."
+}

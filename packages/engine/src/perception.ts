@@ -1,4 +1,9 @@
-import type { Observation, WorldEvent, WorldState } from "@repo/contracts";
+import type {
+  Observation,
+  Point,
+  WorldEvent,
+  WorldState,
+} from "@repo/contracts";
 import { distance, lineOfSight } from "./geometry";
 
 export function perceive(world: WorldState, event: WorldEvent): Observation[] {
@@ -36,17 +41,33 @@ export function perceive(world: WorldState, event: WorldEvent): Observation[] {
     }));
 }
 
+export function canSeeTile(
+  world: WorldState,
+  citizenId: string,
+  position: Point,
+) {
+  const citizen = world.citizens[citizenId];
+  return Boolean(
+    citizen &&
+    position.x >= 0 &&
+    position.y >= 0 &&
+    position.x < world.map.width &&
+    position.y < world.map.height &&
+    distance(citizen.position, position) <= citizen.visionRadius &&
+    lineOfSight(world.map, citizen.position, position),
+  );
+}
+
 export function citizenView(world: WorldState, citizenId: string) {
   const citizen = Object.hasOwn(world.citizens, citizenId)
     ? world.citizens[citizenId]
     : undefined;
   if (!citizen) throw new Error("Citizen not found.");
-  const visible = (position: { x: number; y: number }) =>
-    distance(citizen.position, position) <= citizen.visionRadius &&
-    lineOfSight(world.map, citizen.position, position);
+  const visible = (position: Point) => canSeeTile(world, citizenId, position);
   return {
     self: citizen,
     simTimeMs: world.simTimeMs,
+    terrain: world.map.blocked.filter(visible),
     citizens: Object.values(world.citizens)
       .filter((c) => c.id !== citizenId && visible(c.position))
       .map((c) => ({

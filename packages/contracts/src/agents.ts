@@ -72,6 +72,7 @@ export interface ModelCall {
   arguments: string;
 }
 export interface ModelAnswer {
+  completion?: "completed" | "incomplete";
   responseId: string;
   model: string;
   output: unknown[];

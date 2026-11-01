@@ -19,6 +19,7 @@ await start();
 const server = Bun.serve({
   hostname: process.env.HOST || "127.0.0.1",
   port,
+  idleTimeout: 30,
   fetch: app.fetch,
 });
 console.log(`Simcity API listening at ${server.url}`);

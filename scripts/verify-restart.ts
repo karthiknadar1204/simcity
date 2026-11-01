@@ -31,6 +31,10 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
     headers,
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(15000),
+  }).catch((error: Error) => {
+    throw new Error(
+      `Restart verification request failed at ${path}: ${error.name}`,
+    );
   });
   assert(response.ok, `HTTP ${response.status} at ${path}`);
   return (await response.json()) as T;
@@ -67,6 +71,7 @@ async function stop(signal: "SIGTERM" | "SIGKILL" = "SIGTERM") {
   ]);
 }
 async function command(action: Action, id = crypto.randomUUID()) {
+  console.log(`Fixture command: ${action.kind}`);
   const result = await request<{ state: WorldState; receipt: Receipt }>(
     `/runs/${runId}/commands`,
     { id, action },

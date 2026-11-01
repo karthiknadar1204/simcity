@@ -92,6 +92,16 @@ export class ToolBroker {
       ) {
         const { state } = await this.worlds.current(runId);
         const view = citizenView(state, citizenId);
+        if (
+          tool !== "actions_status" &&
+          view.self.actionId &&
+          state.jobs[view.self.actionId]?.kind === "sleep"
+        )
+          return {
+            status: "unavailable",
+            reason:
+              "The citizen is asleep; surroundings are not being observed.",
+          };
         if (tool === "world_capabilities") {
           const object = view.objects.find(
             (entry) => entry.id === args.targetId,
@@ -131,6 +141,7 @@ export class ToolBroker {
             },
             citizens: view.citizens,
             objects: view.objects,
+            localBlockedTiles: view.terrain,
           },
         };
       }

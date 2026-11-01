@@ -58,12 +58,7 @@ export function buildContext(
     surroundings: {
       citizens: view.citizens,
       objects: view.objects,
-      localBlockedTiles: world.map.blocked.filter(
-        (point) =>
-          Math.abs(point.x - self.position.x) +
-            Math.abs(point.y - self.position.y) <=
-          self.visionRadius,
-      ),
+      localBlockedTiles: view.terrain,
       mapSize: { width: world.map.width, height: world.map.height },
     },
     memories: {

@@ -16,20 +16,31 @@ function clock(time: number, dayLength: number) {
 export function App() {
   const world = useWorld();
   const [selected, setSelected] = useState("");
+  const [residentId, setResidentId] = useState("");
   const [scenario, setScenario] = useState("");
   const [boundary, setBoundary] = useState("0");
   const state = world.state;
   const citizen =
-    state?.citizens[selected] ?? Object.values(state?.citizens ?? {})[0];
+    state?.citizens[selected] ??
+    state?.citizens[world.manifest?.agent?.citizenId ?? ""] ??
+    Object.values(state?.citizens ?? {})[0];
   const disabled = world.busy || world.replaying;
+  const aiCitizen = world.manifest?.agent?.citizenId;
+  const agentProvider = world.manifest?.agent?.provider;
+  const chosenScenario =
+    world.scenarios.find((item) => item.id === scenario) ?? world.scenarios[0];
   return (
     <main className="app">
       <header>
         <div>
-          <p className="eyebrow">SIMCITY / PHASE 01</p>
+          <p className="eyebrow">SIMCITY / PHASE 02</p>
           <h1>A little world, in motion.</h1>
           <p className="description">
-            Operator sandbox · autonomous citizen decisions begin in Phase 2.
+            {agentProvider === "fixture"
+              ? "Scripted provider fixture. This run tests mechanics and recovery."
+              : aiCitizen
+                ? "One citizen chooses with OpenAI. Every action has a real recorded outcome."
+                : "Operator sandbox. Create an AI town to run one autonomous citizen."}
           </p>
         </div>
         <span className={`status ${world.connected ? "online" : ""}`}>
@@ -71,6 +82,33 @@ export function App() {
           onClick={() => void world.create(scenario || world.scenarios[0]!.id)}
         >
           Create town
+        </button>
+        <label>
+          AI citizen
+          <select
+            value={residentId || chosenScenario?.residents[0]?.id || ""}
+            onChange={(event) => setResidentId(event.target.value)}
+          >
+            {chosenScenario?.residents.map((resident) => (
+              <option key={resident.id} value={resident.id}>
+                {resident.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="primary"
+          disabled={world.busy || !chosenScenario}
+          onClick={() => (
+            setSelected(residentId || chosenScenario!.residents[0]!.id),
+            void world.create(
+              chosenScenario!.id,
+              true,
+              residentId || chosenScenario!.residents[0]?.id,
+            )
+          )}
+        >
+          Create AI town
         </button>
       </section>
       {state && citizen ? (
@@ -148,7 +186,7 @@ export function App() {
                 selectedId={citizen.id}
                 replaying={world.replaying}
                 onTile={(position, shift) => {
-                  if (disabled) return;
+                  if (disabled || (!shift && citizen.id === aiCitizen)) return;
                   void world.command(
                     shift
                       ? {
@@ -167,8 +205,11 @@ export function App() {
                 }}
               />
               <p className="map-hint">
-                Click a tile to move {citizen.name}. Shift + click toggles a
-                blocked tile. Use Play or Step to advance time.
+                {citizen.id === aiCitizen
+                  ? "AI chooses destinations."
+                  : `Click a tile to move ${citizen.name}.`}{" "}
+                Shift + click toggles a blocked tile. Use Play or Step to
+                advance time.
               </p>
               <div className="replay-controls">
                 <label htmlFor="sequence">Recorded event</label>
@@ -198,7 +239,10 @@ export function App() {
               key={`${state.runId}-${citizen.id}`}
               state={state}
               citizen={citizen}
-              disabled={disabled}
+              disabled={disabled || citizen.id === aiCitizen}
+              replaying={world.replaying}
+              autonomous={citizen.id === aiCitizen}
+              agentProvider={agentProvider}
               command={world.command}
             />
           </div>

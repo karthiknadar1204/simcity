@@ -2,7 +2,12 @@ import { agentPolicy } from "@repo/contracts";
 import { AgentStore, WorldStore, ThinkingError } from "@repo/storage";
 import { buildContext } from "./context";
 import { citizenInstructions } from "./prompt";
-import { countInput, type CitizenModel, type ModelRequest } from "./openai";
+import {
+  countInput,
+  ModelRequestRejected,
+  type CitizenModel,
+  type ModelRequest,
+} from "./openai";
 import { ToolBroker, type WorldPort } from "./broker";
 
 export class AgentRunner {
@@ -112,6 +117,19 @@ export class AgentRunner {
         }
         const answer = record.answer;
         if (!answer) throw new Error("Saved model answer is missing.");
+        if (answer.completion === "incomplete") {
+          await this.agents.finish(
+            state.runId,
+            guard,
+            "Model output was incomplete; usage recorded and no partial action applied.",
+            "error",
+          );
+          await this.port.execute(state.runId, {
+            id: crypto.randomUUID(),
+            action: { kind: "set-status", status: "paused" },
+          });
+          return;
+        }
         history.push(...answer.output);
         if (!answer.call) {
           await this.agents.finish(state.runId, guard, "continued-or-idle");
@@ -144,10 +162,16 @@ export class AgentRunner {
         "tool-round-limit; recorded review scheduled",
       );
     } catch (error) {
-      if (activeRound !== null)
-        await this.agents
-          .uncertain(state.runId, guard, activeRound)
-          .catch(() => undefined);
+      if (activeRound !== null) {
+        if (error instanceof ModelRequestRejected)
+          await this.agents
+            .rejectRound(state.runId, guard, activeRound)
+            .catch(() => undefined);
+        else
+          await this.agents
+            .uncertain(state.runId, guard, activeRound)
+            .catch(() => undefined);
+      }
       if (error instanceof ThinkingError && error.code === "paused") {
         await this.agents.park(guard);
         return;
@@ -155,13 +179,25 @@ export class AgentRunner {
       if (error instanceof ThinkingError && error.code === "stale") return;
       const limited =
         error instanceof ThinkingError && error.code === "limited";
+      let detail =
+        error instanceof Error
+          ? error.message.split("\n")[0]!.slice(0, 500)
+          : "Unknown thinking error";
+      for (const [key, value] of Object.entries(process.env)) {
+        if (
+          value &&
+          value.length > 10 &&
+          /KEY|TOKEN|SECRET|DATABASE_URL/i.test(key)
+        )
+          detail = detail.replaceAll(value, "[redacted]");
+      }
       const message = limited
         ? error.message
-        : `Thinking failed (${error instanceof Error ? error.name : "unknown"}); no successful action was invented.`;
+        : `Thinking failed: ${detail}. No successful action was invented.`;
       await this.agents
         .finish(state.runId, guard, message, limited ? "limited" : "error")
         .catch(() => undefined);
-      if (limited)
+      if (limited || error instanceof ModelRequestRejected)
         await this.port.execute(state.runId, {
           id: crypto.randomUUID(),
           action: { kind: "set-status", status: "paused" },
@@ -169,6 +205,7 @@ export class AgentRunner {
     } finally {
       clearInterval(timer);
       while (renewing) await Bun.sleep(10);
+      await this.agents.releaseLease(guard).catch(() => undefined);
     }
   }
 }

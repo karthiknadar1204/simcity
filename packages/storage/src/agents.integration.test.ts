@@ -12,8 +12,9 @@ live(
   "thinking is durable, single-owner, and fenced when new personal evidence arrives",
   async () => {
     const { db, pool } = createDatabase(process.env.DATABASE_URL!);
+    const worlds = new WorldStore(db);
+    let fixture: { id: string; generation: number } | undefined;
     try {
-      const worlds = new WorldStore(db);
       const agents = new AgentStore(db);
       const input = parseScenario(scenario);
       const actor = input.citizens[0]!;
@@ -33,6 +34,7 @@ live(
       );
       const id = created.state.runId;
       const generation = await worlds.claim(id, "world-owner");
+      fixture = { id, generation };
       await worlds.execute(id, "world-owner", generation, {
         id: "start",
         action: { kind: "set-status", status: "running" },
@@ -100,11 +102,58 @@ live(
         ),
       ).toBeNull();
       await worlds.execute(id, "world-owner", generation, {
+        id: "sleep-case-ready",
+        action: { kind: "advance", durationMs: 1000 },
+      });
+      expect(
+        await agents.begin(changed!.taskId!, "overlapping-worker"),
+      ).toBeNull();
+      await agents.releaseLease(guard);
+      const nextClaim = (await agents.begin(
+        changed!.taskId!,
+        "worker-after-message",
+      ))!;
+      const bed = input.objects.find(
+        (object) => object.ownerId === actor.id && object.tags.includes("bed"),
+      )!;
+      await worlds.execute(id, "world-owner", generation, {
+        id: "operator-sleep",
+        action: {
+          kind: "sleep",
+          actorId: actor.id,
+          targetId: bed.id,
+          durationMs: 60000,
+        },
+      });
+      await expect(
+        worlds.execute(
+          id,
+          "world-owner",
+          generation,
+          {
+            id: "old-awake-decision",
+            action: { kind: "wait", actorId: actor.id, durationMs: 1000 },
+          },
+          nextClaim.guard,
+        ),
+      ).rejects.toThrow("superseded");
+      await worlds.execute(id, "world-owner", generation, {
         id: "pause-after-fixture",
         action: { kind: "set-status", status: "paused" },
       });
       console.log(`Durable thinking fixture ${id}`);
     } finally {
+      if (fixture) {
+        await worlds
+          .execute(fixture.id, "world-owner", fixture.generation, {
+            id: "cleanup-pause",
+            action: { kind: "set-status", status: "paused" },
+          })
+          .catch(() => undefined);
+        await worlds
+          .release(fixture.id, "world-owner", fixture.generation)
+          .catch(() => undefined);
+      }
       await pool.end();
     }
   },

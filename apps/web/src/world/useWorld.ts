@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Action, Receipt, WorldState } from "@repo/contracts";
+import type { Action, Receipt, WorldState, RunManifest } from "@repo/contracts";
 import { request, worldUrl } from "../lib/api";
 
-type CatalogItem = { id: string; name: string; citizens: number };
+type CatalogItem = {
+  id: string;
+  name: string;
+  citizens: number;
+  residents: { id: string; name: string }[];
+};
+type RunDetails = { state: WorldState; manifest: RunManifest };
 type RunItem = {
   id: string;
   scenarioId: string;
@@ -17,6 +23,7 @@ export function useWorld() {
   const [runId, setRunId] = useState(
     () => localStorage.getItem("simcity.run") || "",
   );
+  const [manifest, setManifest] = useState<RunManifest | null>(null);
   const [live, setLive] = useState<WorldState | null>(null);
   const [historical, setHistorical] = useState<WorldState | null>(null);
   const [connected, setConnected] = useState(false);
@@ -50,6 +57,12 @@ export function useWorld() {
   useEffect(() => {
     if (!runId) return;
     localStorage.setItem("simcity.run", runId);
+    const controller = new AbortController();
+    request<RunDetails>(`/runs/${runId}`, { signal: controller.signal })
+      .then((details) => setManifest(details.manifest))
+      .catch((error) => {
+        if (!controller.signal.aborted) setMessage(error.message);
+      });
     const stream = new EventSource(worldUrl(`/runs/${runId}/stream`));
     stream.addEventListener("world", (event) => {
       const incoming = JSON.parse(event.data) as WorldState;
@@ -64,23 +77,41 @@ export function useWorld() {
     stream.onerror = () => {
       setConnected(false);
     };
-    return () => stream.close();
+    return () => {
+      controller.abort();
+      stream.close();
+    };
   }, [runId]);
   function selectRun(id: string) {
+    setManifest(null);
     setLive(null);
     setHistorical(null);
     setConnected(false);
     setRunId(id);
   }
-  async function create(scenarioId: string) {
+  async function create(
+    scenarioId: string,
+    autonomous = false,
+    citizenId?: string,
+  ) {
     setBusy(true);
     try {
-      const result = await request<{ state: WorldState }>("/runs", {
+      const result = await request<RunDetails>("/runs", {
         method: "POST",
-        body: JSON.stringify({ scenarioId }),
+        body: JSON.stringify({
+          scenarioId,
+          ...(autonomous
+            ? { autonomous: true, ...(citizenId ? { citizenId } : {}) }
+            : {}),
+        }),
       });
       selectRun(result.state.runId);
-      setMessage("Town created. Select a citizen, then click a destination.");
+      setManifest(result.manifest);
+      setMessage(
+        autonomous
+          ? "AI town created and paused. Press Play to let the citizen choose an activity."
+          : "Town created. Select a citizen, then click a destination.",
+      );
       await refreshRuns();
     } catch (error) {
       setMessage(
@@ -135,6 +166,7 @@ export function useWorld() {
     }
   }
   return {
+    manifest,
     scenarios,
     runs,
     runId,

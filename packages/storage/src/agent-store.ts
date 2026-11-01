@@ -1,5 +1,16 @@
 import type { Database } from "@repo/db";
-import { and, asc, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   agentBudgets,
   agentControls,
@@ -86,6 +97,20 @@ export class AgentStore {
         return null;
       if (turn.data.ownerId && turn.data.ownerId !== ownerId && turn.liveLease)
         return null;
+      const [busy] = await tx
+        .select({ id: thinkingTurns.id })
+        .from(thinkingTurns)
+        .innerJoin(backgroundTasks, eq(backgroundTasks.id, thinkingTurns.id))
+        .where(
+          and(
+            eq(backgroundTasks.runId, task.runId),
+            eq(thinkingTurns.citizenId, control.citizenId),
+            ne(thinkingTurns.id, taskId),
+            sql`${thinkingTurns.ownerId} is not null and ${thinkingTurns.leaseUntil} > clock_timestamp()`,
+          ),
+        )
+        .limit(1);
+      if (busy) return null;
       if ((await contentHash(run.state)) !== run.stateHash)
         throw new ThinkingError("unavailable", "World hash mismatch.");
       const generation = turn.data.generation + 1;
@@ -135,6 +160,18 @@ export class AgentStore {
       )
       .returning({ id: thinkingTurns.id });
     return updated.length === 1;
+  }
+  async releaseLease(guard: AgentGuard) {
+    await this.db
+      .update(thinkingTurns)
+      .set({ ownerId: null, leaseUntil: null })
+      .where(
+        and(
+          eq(thinkingTurns.id, guard.taskId),
+          eq(thinkingTurns.ownerId, guard.ownerId),
+          eq(thinkingTurns.generation, guard.generation),
+        ),
+      );
   }
   async saveContext(
     runId: string,
@@ -323,6 +360,37 @@ export class AgentStore {
         .where(eq(agentBudgets.runId, runId));
     });
   }
+  async rejectRound(runId: string, guard: AgentGuard, round: number) {
+    await this.db.transaction(async (tx) => {
+      const run = await this.lockRun(tx, runId);
+      await assertThinkingGuard(tx, run.state, guard, false);
+      const [prior] = await tx
+        .select()
+        .from(modelRounds)
+        .where(
+          and(
+            eq(modelRounds.taskId, guard.taskId),
+            eq(modelRounds.round, round),
+          ),
+        );
+      if (!prior || prior.status !== "reserved") return;
+      await tx
+        .update(modelRounds)
+        .set({ status: "rejected", costMicroUsd: 0 })
+        .where(
+          and(
+            eq(modelRounds.taskId, guard.taskId),
+            eq(modelRounds.round, round),
+          ),
+        );
+      await tx
+        .update(agentBudgets)
+        .set({
+          reservedMicroUsd: sql`${agentBudgets.reservedMicroUsd} - ${prior.reservedMicroUsd}`,
+        })
+        .where(eq(agentBudgets.runId, runId));
+    });
+  }
   async finish(
     runId: string,
     guard: AgentGuard,
@@ -427,6 +495,7 @@ export class AgentStore {
           eq(agentControls.status, "active"),
           sql`${agentControls.configuration}->>'provider' = 'openai'`,
           eq(agentControls.taskId, thinkingTurns.id),
+          sql`not exists (select 1 from sim_thinking_turns busy join sim_background_tasks busy_task on busy_task.id = busy.id where busy_task.run_id = ${runs.id} and busy.citizen_id = ${thinkingTurns.citizenId} and busy.id <> ${thinkingTurns.id} and busy.owner_id is not null and busy.lease_until > clock_timestamp())`,
           lte(thinkingTurns.availableAtMs, runs.simTimeMs),
           or(
             isNull(thinkingTurns.leaseUntil),

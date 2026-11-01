@@ -2,15 +2,27 @@ import { useEffect, useState } from "react";
 import type { Action, Citizen, Observation, WorldState } from "@repo/contracts";
 import { parseCommand } from "@repo/contracts";
 import { request } from "../lib/api";
+import { ThinkingPanel } from "./ThinkingPanel";
 
 type ObservationsResponse = { observations: Observation[] };
 type Props = {
   state: WorldState;
   citizen: Citizen;
   disabled: boolean;
+  autonomous: boolean;
+  agentProvider?: "openai" | "fixture";
+  replaying: boolean;
   command: (action: Action) => Promise<void>;
 };
-export function CitizenPanel({ state, citizen, disabled, command }: Props) {
+export function CitizenPanel({
+  state,
+  citizen,
+  disabled,
+  command,
+  autonomous,
+  agentProvider,
+  replaying,
+}: Props) {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [text, setText] = useState("");
   const [draft, setDraft] = useState('{"kind":"wait","durationMs":1000}');
@@ -47,6 +59,61 @@ export function CitizenPanel({ state, citizen, disabled, command }: Props) {
       <p className="muted">
         Tile {citizen.position.x}, {citizen.position.y} · {job?.kind || "idle"}
       </p>
+      {autonomous && (
+        <span className="pill">
+          {agentProvider === "fixture"
+            ? "Scripted provider fixture"
+            : "OpenAI citizen"}
+        </span>
+      )}
+      {citizen.plan && (
+        <section className="plan">
+          <h3>Current intention</h3>
+          <strong>{citizen.plan.currentActivity}</strong>
+          <p>{citizen.plan.goal}</p>
+          <p className="muted">{citizen.plan.briefReason}</p>
+          {citizen.plan.blocker && <p>Blocker: {citizen.plan.blocker}</p>}
+          <details>
+            <summary>Day outline and project steps</summary>
+            <ul>
+              {citizen.plan.dayOutline.map((entry, index) => (
+                <li key={index}>
+                  <b>{entry.window}:</b> {entry.activity}
+                </li>
+              ))}
+            </ul>
+            <ol>
+              {citizen.plan.steps.map((step, index) => (
+                <li
+                  key={index}
+                  className={
+                    citizen.plan!.cursor === index ? "current-step" : ""
+                  }
+                >
+                  {step}
+                </li>
+              ))}
+            </ol>
+            <small>
+              Plan v{citizen.plan.version} · intentions; action receipts
+              establish outcomes.
+            </small>
+          </details>
+        </section>
+      )}
+      {autonomous && !replaying && (
+        <ThinkingPanel
+          key={`${state.runId}-${citizen.id}`}
+          runId={state.runId}
+          citizenId={citizen.id}
+        />
+      )}
+      {autonomous && replaying && (
+        <p className="muted">
+          This is the plan saved at the historical boundary. Live thinking
+          traces are hidden.
+        </p>
+      )}
       <div className="needs">
         <span>
           Energy <b>{citizen.needs.energy}/1000</b>

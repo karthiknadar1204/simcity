@@ -2,7 +2,9 @@ import { join } from "node:path";
 import { workspaceRoot } from "@repo/db/env";
 import { contentHash, type RunProvenance } from "@repo/contracts";
 
-export async function runProvenance(): Promise<{
+export async function runProvenance(
+  protocolName: "baseline" | "phase-2" = "baseline",
+): Promise<{
   revision: string;
   provenance: RunProvenance;
 }> {
@@ -13,7 +15,7 @@ export async function runProvenance(): Promise<{
     cwd: workspaceRoot,
   });
   const protocol = await Bun.file(
-    join(workspaceRoot, "experiments/protocols/baseline.json"),
+    join(workspaceRoot, `experiments/protocols/${protocolName}.json`),
   ).json();
   if (
     typeof protocol.id !== "string" ||

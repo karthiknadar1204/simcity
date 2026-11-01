@@ -38,7 +38,7 @@ export function lineOfSight(map: WorldMap, from: Point, to: Point) {
       error += dx;
       y += sy;
     }
-    if (!walkable(map, { x, y })) return false;
+    if (!walkable(map, { x, y })) return x === to.x && y === to.y;
   }
   return true;
 }

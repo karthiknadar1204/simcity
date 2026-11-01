@@ -143,7 +143,9 @@ export function worldRoutes(
         maxRequests: agentPolicy.maxRequests,
       };
     }
-    const { revision, provenance } = await runProvenance();
+    const { revision, provenance } = await runProvenance(
+      body.autonomous ? "phase-2" : "baseline",
+    );
     return c.json(
       await service().store.create(scenario, revision, provenance, agent),
       201,
@@ -219,26 +221,34 @@ export function worldRoutes(
   app.get("/runs/:id/stream", async (c) => {
     const { store } = service();
     await store.current(c.req.param("id"));
-    return streamSSE(c, async (stream) => {
-      let sequence = -1;
-      let keepAliveAt = Date.now();
-      while (!stream.aborted) {
-        const { state } = await store.current(c.req.param("id"));
-        if (state.sequence !== sequence) {
-          await stream.writeSSE({
-            event: "world",
-            id: String(state.sequence),
-            data: JSON.stringify(state),
-          });
-          sequence = state.sequence;
-          keepAliveAt = Date.now();
-        } else if (Date.now() - keepAliveAt >= 5000) {
-          await stream.writeSSE({ event: "heartbeat", data: "ping" });
-          keepAliveAt = Date.now();
+    return streamSSE(
+      c,
+      async (stream) => {
+        let sequence = -1;
+        let keepAliveAt = Date.now();
+        while (!stream.aborted) {
+          const { state } = await store.current(c.req.param("id"));
+          if (state.sequence !== sequence) {
+            await stream.writeSSE({
+              event: "world",
+              id: String(state.sequence),
+              data: JSON.stringify(state),
+            });
+            sequence = state.sequence;
+            keepAliveAt = Date.now();
+          } else if (Date.now() - keepAliveAt >= 5000) {
+            await stream.writeSSE({ event: "heartbeat", data: "ping" });
+            keepAliveAt = Date.now();
+          }
+          await stream.sleep(500);
         }
-        await stream.sleep(500);
-      }
-    });
+      },
+      async () => {
+        console.error(
+          "Live world stream interrupted; the browser can reconnect.",
+        );
+      },
+    );
   });
   return app;
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { citizenView } from "@repo/engine";
+import { citizenView, canSeeTile } from "@repo/engine";
 import {
   planProposalSchema,
   parseCommand,
@@ -149,9 +149,7 @@ export function actionFor(
         (args.targetId === null &&
         typeof args.x === "number" &&
         typeof args.y === "number" &&
-        Math.abs(args.x - self.position.x) +
-          Math.abs(args.y - self.position.y) <=
-          self.visionRadius
+        canSeeTile(state, citizenId, { x: args.x, y: args.y })
           ? { x: args.x, y: args.y }
           : null);
       if (!destination)

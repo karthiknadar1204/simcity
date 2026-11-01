@@ -337,3 +337,49 @@ code {
     max-width: 220px;
   }
 }
+.plan,
+.thinking-panel {
+  border-top: 1px solid #3c4b3e;
+  padding-top: 8px;
+  margin-top: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.plan ul,
+.plan ol {
+  padding-left: 18px;
+}
+.current-step {
+  color: #e4dca8;
+  font-weight: 600;
+}
+.tool-trace {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+.tool-trace > li {
+  border-left: 2px solid #62755b;
+  padding-left: 10px;
+  margin: 14px 0;
+}
+.tool-trace span,
+.tool-trace small {
+  display: block;
+}
+.tool-trace small {
+  color: #a1b0a4;
+}
+.thinking-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  background: #152019;
+}
+.spending {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

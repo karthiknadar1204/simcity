@@ -33,24 +33,20 @@ export async function enqueueThinking(
   reasons: string[],
 ) {
   const taskId = crypto.randomUUID();
-  await tx
-    .insert(backgroundTasks)
-    .values({
-      id: taskId,
-      runId: state.runId,
-      kind: "agent.think",
-      payload: { runId: state.runId, citizenId, version },
-      status: "pending",
-    });
-  await tx
-    .insert(thinkingTurns)
-    .values({
-      id: taskId,
-      citizenId,
-      version,
-      reasons,
-      availableAtMs: state.simTimeMs + agentPolicy.debounceMs,
-    });
+  await tx.insert(backgroundTasks).values({
+    id: taskId,
+    runId: state.runId,
+    kind: "agent.think",
+    payload: { runId: state.runId, citizenId, version },
+    status: "pending",
+  });
+  await tx.insert(thinkingTurns).values({
+    id: taskId,
+    citizenId,
+    version,
+    reasons,
+    availableAtMs: state.simTimeMs + agentPolicy.debounceMs,
+  });
   await tx.insert(outbox).values({ taskId });
   return taskId;
 }
@@ -63,18 +59,16 @@ export async function initializeThinking(
   const taskId = await enqueueThinking(tx, state, configuration.citizenId, 1, [
     "self-initiated",
   ]);
-  await tx
-    .insert(agentControls)
-    .values({
-      runId: state.runId,
-      citizenId: configuration.citizenId,
-      configuration,
-      version: 1,
-      status: "active",
-      taskId,
-      nextReviewAtMs: state.simTimeMs,
-      pendingReasons: ["self-initiated"],
-    });
+  await tx.insert(agentControls).values({
+    runId: state.runId,
+    citizenId: configuration.citizenId,
+    configuration,
+    version: 1,
+    status: "active",
+    taskId,
+    nextReviewAtMs: state.simTimeMs,
+    pendingReasons: ["self-initiated"],
+  });
 }
 
 export async function assertThinkingGuard(
@@ -172,7 +166,39 @@ export async function recordThinkingTriggers(
       (!job || job.kind === "move")
     )
       reasons.push("review");
-    if (job?.kind === "sleep" || !reasons.length) continue;
+    if (job?.kind === "sleep") {
+      if (
+        !guard &&
+        "actorId" in command.action &&
+        command.action.actorId === citizen.id &&
+        control.taskId
+      ) {
+        await tx
+          .update(backgroundTasks)
+          .set({ status: "superseded" })
+          .where(eq(backgroundTasks.id, control.taskId));
+        await tx
+          .update(thinkingTurns)
+          .set({ outcome: "superseded by operator sleep" })
+          .where(eq(thinkingTurns.id, control.taskId));
+        await tx
+          .update(agentControls)
+          .set({
+            version: control.version + 1,
+            taskId: null,
+            pendingReasons: [],
+            nextReviewAtMs: job.endsAt,
+          })
+          .where(
+            and(
+              eq(agentControls.runId, before.runId),
+              eq(agentControls.citizenId, citizen.id),
+            ),
+          );
+      }
+      continue;
+    }
+    if (!reasons.length) continue;
     reasons = [...new Set([...control.pendingReasons, ...reasons])].slice(-10);
     const [existing] = control.taskId
       ? await tx

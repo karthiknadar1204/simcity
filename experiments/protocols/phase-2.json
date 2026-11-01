@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "one-citizen-development-v1",
+  "purpose": "Development gate for a dynamic tool-using citizen; not a held-out memory evaluation",
+  "actorMode": "autonomous",
+  "thinkingCitizensPerRun": 1,
+  "initialGoal": "No operator task; scenario identity, motivations and legitimate experiences only",
+  "clockPolicy": "freeze-during-downtime",
+  "memoryVariant": "personal-seeds-and-observations",
+  "limits": {
+    "spendingLimitUsd": 1,
+    "maxRequests": 80,
+    "maxToolRounds": 6,
+    "maxMemorySearches": 2,
+    "estimatedContextTokens": 8000,
+    "maxOutputTokens": 1400,
+    "globalModelConcurrency": 2,
+    "perCitizenModelConcurrency": 1
+  },
+  "gates": [
+    "self-initiated revisable plan",
+    "model-chosen destination",
+    "recorded tile-by-tile movement",
+    "real action outcome",
+    "reaction to a permitted encounter or changed circumstance",
+    "usable invalid-request feedback",
+    "durable pending task and saved-response recovery",
+    "no duplicate world effect",
+    "replay without inference"
+  ],
+  "operatorPerturbations": [
+    "block a route tile",
+    "move a separate resident nearby",
+    "deliver an audible message"
+  ],
+  "reporting": "Disclose provider=fixture separately; never count scripted model responses as autonomous evidence",
+  "status": "development acceptance contract; live gate requires funded OpenAI inference"
+}

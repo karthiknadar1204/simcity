@@ -23,6 +23,7 @@ Read `skill-centre.md` and apply relevant skills from `.agent/skills`. That dire
 ## Ownership and folders
 
 - `packages/contracts`: shared schemas and wire formats.
+- `packages/agent-runtime`: bounded context, OpenAI adapter, typed tools, durable thinking runner, and BullMQ cognition host.
 - `packages/engine`: pure deterministic world transitions. No database, network, model, or renderer imports.
 - `packages/db`: Drizzle schemas, migrations, and database connection.
 - `packages/storage`: transactional recording, recovery, and object archives.

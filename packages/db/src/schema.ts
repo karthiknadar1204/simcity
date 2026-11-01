@@ -197,7 +197,7 @@ export const modelRounds = pgTable(
       .notNull(),
     round: integer("round").notNull(),
     status: text("status", {
-      enum: ["reserved", "responded", "applied", "uncertain"],
+      enum: ["reserved", "responded", "applied", "uncertain", "rejected"],
     }).notNull(),
     request: jsonb("request")
       .$type<{

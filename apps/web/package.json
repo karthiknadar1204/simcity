@@ -11,6 +11,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@repo/playback": "workspace:*",
     "@repo/ui": "*",
     "phaser": "4.2.1",
     "react": "19.2.8",

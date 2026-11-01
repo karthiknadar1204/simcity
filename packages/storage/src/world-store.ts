@@ -7,6 +7,9 @@ import {
   observations,
   runs,
   agentBudgets,
+  agentControls,
+  backgroundTasks,
+  thinkingTurns,
 } from "@repo/db/tables";
 import {
   contentHash,
@@ -21,6 +24,7 @@ import {
   runtimePolicy,
   agentPolicy,
   memoryPolicy,
+  configuredAgents,
   type AgentConfiguration,
   type AgentGuard,
 } from "@repo/contracts";
@@ -58,9 +62,39 @@ export class WorldStore {
       dependencyLockHash: null,
       protocol: null,
     },
-    agent?: AgentConfiguration,
+    agentInput?: AgentConfiguration | AgentConfiguration[],
   ): Promise<StoredWorld> {
+    const agents = agentInput
+      ? Array.isArray(agentInput)
+        ? agentInput
+        : [agentInput]
+      : [];
+    const agent = agents[0];
     const scenario = parseScenario(input);
+    if (
+      new Set(agents.map((item) => item.citizenId)).size !== agents.length ||
+      agents.some(
+        (item) =>
+          !scenario.citizens.some((citizen) => citizen.id === item.citizenId),
+      )
+    )
+      throw new StoreError(
+        "Configure each autonomous citizen once, using scenario IDs.",
+        400,
+      );
+    if (
+      agent &&
+      agents.some(
+        (item) =>
+          item.provider !== agent.provider ||
+          item.spendingLimitMicroUsd !== agent.spendingLimitMicroUsd ||
+          item.maxRequests !== agent.maxRequests,
+      )
+    )
+      throw new StoreError(
+        "Citizens in one run share a provider and one explicit run budget.",
+        400,
+      );
     if (
       agent &&
       !scenario.citizens.some((citizen) => citizen.id === agent.citizenId)
@@ -72,15 +106,15 @@ export class WorldStore {
       version: 1,
       runId: state.runId,
       parentRunId: null,
-      engineVersion: "phase3-v1",
-      schemaVersion: "drizzle-0003",
+      engineVersion: "phase4-v1",
+      schemaVersion: "drizzle-0004",
       scenarioId: scenario.id,
       scenarioHash: await contentHash(scenario),
       engineCommit: commit,
       seed: scenario.seed,
       clockPolicy: "freeze-during-downtime",
       actorMode: agent ? "autonomous" : "operator-fixture",
-      ...(agent ? { agent, agentRuntime: agentPolicy } : {}),
+      ...(agent ? { agent, agents, agentRuntime: agentPolicy } : {}),
       modelRoles: agent
         ? {
             actor: agent.model,
@@ -124,8 +158,11 @@ export class WorldStore {
           limitMicroUsd: agent.spendingLimitMicroUsd,
           maxRequests: agent.maxRequests,
         });
-        await initializeThinking(tx, state, agent);
-        if (agent.memory) await initializeMemories(tx, state, agent.citizenId);
+        for (const configuration of agents) {
+          await initializeThinking(tx, state, configuration);
+          if (configuration.memory)
+            await initializeMemories(tx, state, configuration.citizenId);
+        }
       }
     });
     return { state, stateHash, manifest };
@@ -228,8 +265,9 @@ export class WorldStore {
         receipt: result.receipt,
       });
       await recordThinkingTriggers(tx, row.state, result, command, guard);
-      if (row.manifest.agent?.memory)
-        await recordMemories(tx, result, row.manifest.agent.citizenId);
+      for (const configuration of configuredAgents(row.manifest))
+        if (configuration.memory)
+          await recordMemories(tx, result, configuration.citizenId);
       await tx
         .update(runs)
         .set({
@@ -357,6 +395,23 @@ export class WorldStore {
       )
       .orderBy(asc(runs.createdAt))
       .limit(100);
+  }
+
+  async hasReadyThinking(runId: string, simTimeMs: number) {
+    const [row] = await this.db
+      .select({ id: backgroundTasks.id })
+      .from(agentControls)
+      .innerJoin(backgroundTasks, eq(backgroundTasks.id, agentControls.taskId))
+      .innerJoin(thinkingTurns, eq(thinkingTurns.id, backgroundTasks.id))
+      .where(
+        and(
+          eq(agentControls.runId, runId),
+          lte(thinkingTurns.availableAtMs, simTimeMs),
+          sql`${backgroundTasks.status} in ('pending','queued','running')`,
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
   }
 
   async history(runId: string, after: number, limit = 100) {

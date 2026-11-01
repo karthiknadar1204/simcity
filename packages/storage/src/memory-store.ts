@@ -290,7 +290,11 @@ export class MemoryStore {
         kind: observation.kind,
         content: observation.content,
         actorId: row.event.actorId,
-        ...(observation.kind === "speech.delivered" && action?.kind === "say"
+        ...(["speech.delivered", "alert.delivered"].includes(
+          observation.kind,
+        ) &&
+        action &&
+        "text" in action
           ? { utterance: action.text }
           : {}),
         participantIds: [

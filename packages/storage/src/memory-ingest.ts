@@ -185,6 +185,8 @@ export async function initializeMemories(
 
 const significant = new Set([
   "speech.delivered",
+  "alert.delivered",
+  "conversation.ended",
   "action.started",
   "action.completed",
   "action.failed",
@@ -235,8 +237,8 @@ export async function recordMemories(
       kind: observation.kind,
       content: observation.content,
       actorId: event.actorId,
-      ...(observation.kind === "speech.delivered" &&
-      result.receipt.action.kind === "say"
+      ...(["speech.delivered", "alert.delivered"].includes(observation.kind) &&
+      "text" in result.receipt.action
         ? { utterance: result.receipt.action.text }
         : {}),
       participantIds: [

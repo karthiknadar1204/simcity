@@ -30,7 +30,7 @@ export function PhaserGame({
     };
   }, []);
   useEffect(() => {
-    game.current?.setWorld(state, replaying);
+    game.current?.setWorld(state);
   }, [state, replaying]);
   useEffect(() => {
     game.current?.setSelection(selectedId);

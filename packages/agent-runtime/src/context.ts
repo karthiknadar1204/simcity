@@ -1,5 +1,6 @@
 import type { Observation, WorldState } from "@repo/contracts";
 import { citizenView } from "@repo/engine";
+import { activeConversation } from "@repo/contracts";
 
 export function buildContext(
   world: WorldState,
@@ -37,6 +38,7 @@ export function buildContext(
       name: self.name,
       biography: self.biography,
       motivations: self.motivations,
+      dailyRhythm: self.dailyRhythm ?? null,
     },
     self: {
       position: self.position,
@@ -46,6 +48,7 @@ export function buildContext(
       job: ownJob,
     },
     plan: self.plan ?? null,
+    conversation: activeConversation(world, citizenId),
     knownPlaces: Object.values(world.objects)
       .filter((object) => knownIds.has(object.id) || visibleIds.has(object.id))
       .map((object) => ({

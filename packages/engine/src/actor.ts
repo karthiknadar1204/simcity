@@ -1,4 +1,9 @@
-import { stableStringify, type Action } from "@repo/contracts";
+import {
+  stableStringify,
+  activeConversation,
+  type Action,
+} from "@repo/contracts";
+import { conversationAction, endConversation } from "./conversations";
 import { WorldTransition, requireRule } from "./transition";
 import { citizenView } from "./perception";
 import { change, scale, total } from "./resources";
@@ -24,6 +29,29 @@ export function act(
     return;
   }
   requireRule(currentJob?.kind !== "sleep", "Citizen is sleeping.");
+  if (
+    [
+      "conversation-start",
+      "conversation-reply",
+      "conversation-end",
+      "alert",
+    ].includes(action.kind)
+  ) {
+    conversationAction(
+      ctx,
+      action as Extract<
+        Action,
+        {
+          kind:
+            | "conversation-start"
+            | "conversation-reply"
+            | "conversation-end"
+            | "alert";
+        }
+      >,
+    );
+    return;
+  }
   if (action.kind === "plan") {
     requireRule(
       action.expectedVersion === (actor.plan?.version ?? 0),
@@ -67,7 +95,18 @@ export function act(
     ctx.emit(
       "speech.delivered",
       `${actor.name}: ${action.text}`,
-      {},
+      {
+        citizens: {
+          [actor.id]: {
+            ...actor,
+            lastSpeech: {
+              sequence: ctx.state.sequence + 1,
+              simTimeMs: ctx.state.simTimeMs,
+              text: action.text,
+            },
+          },
+        },
+      },
       {
         actorId: actor.id,
         position: actor.position,
@@ -114,6 +153,9 @@ export function act(
           (!bed.ownerId || bed.ownerId === actor.id),
         "Citizen needs an accessible bed at their location.",
       );
+      const conversation = activeConversation(ctx.state, actor.id);
+      if (conversation)
+        endConversation(ctx, conversation, "participant went to sleep");
       startTimedJob(ctx, actor, action.durationMs, bed.id);
       return;
     }

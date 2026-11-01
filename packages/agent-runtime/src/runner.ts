@@ -1,5 +1,10 @@
-import { agentPolicy } from "@repo/contracts";
-import { AgentStore, WorldStore, ThinkingError } from "@repo/storage";
+import { agentPolicy, activeConversation } from "@repo/contracts";
+import {
+  AgentStore,
+  WorldStore,
+  ThinkingError,
+  isTransientDatabaseError,
+} from "@repo/storage";
 import { buildContext } from "./context";
 import { citizenInstructions } from "./prompt";
 import {
@@ -102,6 +107,9 @@ export class AgentRunner {
       let allowTextOnly = citizen.actionId
         ? state.jobs[citizen.actionId]?.status === "running"
         : false;
+      const conversation = activeConversation(state, guard.citizenId);
+      if (conversation && conversation.nextSpeakerId !== guard.citizenId)
+        allowTextOnly = true;
       for (let round = 0; round < agentPolicy.maxRounds; round++) {
         let record = saved.find((row) => row.round === round);
         if (!record) {
@@ -201,8 +209,11 @@ export class AgentRunner {
             .uncertain(state.runId, guard, activeRound)
             .catch(() => undefined);
       }
-      if (error instanceof ThinkingError && error.code === "paused") {
-        await this.agents.park(guard);
+      if (
+        (error instanceof ThinkingError && error.code === "paused") ||
+        isTransientDatabaseError(error)
+      ) {
+        await this.agents.park(guard).catch(() => undefined);
         return;
       }
       if (error instanceof ThinkingError && error.code === "stale") return;

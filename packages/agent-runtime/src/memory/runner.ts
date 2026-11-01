@@ -8,6 +8,7 @@ import {
   MemoryWorkStore,
   publishMemoryAnswer,
   ThinkingError,
+  isTransientDatabaseError,
   type MemoryClaim,
 } from "@repo/storage";
 import { ModelRequestRejected } from "../openai";
@@ -228,6 +229,7 @@ export class MemoryRunner {
           )
           .catch(() => undefined);
       if (error instanceof ThinkingError && error.code === "stale") return;
+      if (isTransientDatabaseError(error)) return;
       const detail =
         error instanceof ModelRequestRejected || error instanceof ThinkingError
           ? error.message.slice(0, 300)

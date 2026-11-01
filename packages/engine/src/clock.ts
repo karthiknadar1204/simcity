@@ -2,6 +2,7 @@ import { WorldTransition, requireRule } from "./transition";
 import { progressJob } from "./jobs";
 import { clampNeed } from "./work";
 import { amount } from "./resources";
+import { reconcileConversations } from "./conversations";
 
 function metabolism(ctx: WorldTransition) {
   const rules = ctx.state.rules;
@@ -87,6 +88,9 @@ export function advanceClock(ctx: WorldTransition, durationMs: number) {
       ...active.map((job) =>
         job.kind === "move" ? job.nextStepAt : job.endsAt,
       ),
+      ...Object.values(ctx.state.conversations ?? {})
+        .filter((item) => item.status !== "ended")
+        .map((item) => item.expiresAtMs),
     );
     requireRule(next > ctx.state.simTimeMs, "A job has an invalid due time.");
     ctx.emit("clock.advanced", "Simulation time advanced.", {
@@ -97,5 +101,6 @@ export function advanceClock(ctx: WorldTransition, durationMs: number) {
     for (const job of active.sort((a, b) => (a.id < b.id ? -1 : 1)))
       if ((job.kind === "move" ? job.nextStepAt : job.endsAt) === next)
         progressJob(ctx, job);
+    reconcileConversations(ctx);
   }
 }

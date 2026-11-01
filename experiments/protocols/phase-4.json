@@ -1,0 +1,16 @@
+{
+  "id": "three-citizen-day-v1",
+  "version": 1,
+  "description": "Three independently prompted residents, bounded conversations, private memory, dynamic plans and sleep/wake continuity. No scripted future choices.",
+  "gates": [
+    "three-independent-citizen-contexts",
+    "self-initiated-activities",
+    "citizen-initiated-conversation",
+    "memory-informed-choice",
+    "reaction-or-revised-plan",
+    "complete-simulated-day-and-next-morning-wake",
+    "sleep-restart-continuity"
+  ],
+  "maxPilotMicroUsd": 1500000,
+  "limitations": "Development pilot, not paper-scale or held-out evidence. Seeded biography and rhythm preferences are declared initial conditions."
+}

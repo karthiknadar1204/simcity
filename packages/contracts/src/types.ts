@@ -37,6 +37,8 @@ export interface Citizen {
   initialMemories: string[];
   actionId: string | null;
   facing: Facing;
+  dailyRhythm?: { sleepMinute: number; wakeMinute: number };
+  lastSpeech?: { sequence: number; simTimeMs: number; text: string };
   plan?: import("./agents").CitizenPlan;
 }
 
@@ -85,6 +87,28 @@ export interface Scenario {
 }
 
 export type Action =
+  | {
+      kind: "conversation-start";
+      actorId: string;
+      targetId: string;
+      text: string;
+    }
+  | {
+      kind: "conversation-reply";
+      actorId: string;
+      conversationId: string;
+      expectedVersion: number;
+      text: string;
+      end: boolean;
+    }
+  | {
+      kind: "conversation-end";
+      actorId: string;
+      conversationId: string;
+      expectedVersion: number;
+      reason: string;
+    }
+  | { kind: "alert"; actorId: string; targetId: string; text: string }
   | {
       kind: "plan";
       actorId: string;
@@ -167,6 +191,7 @@ export interface WorldState {
   citizens: Record<string, Citizen>;
   objects: Record<string, WorldObject>;
   jobs: Record<string, ActionJob>;
+  conversations?: Record<string, import("./social").Conversation>;
 }
 
 export type StatePatch = Partial<
@@ -180,6 +205,7 @@ export type StatePatch = Partial<
     | "citizens"
     | "objects"
     | "jobs"
+    | "conversations"
   >
 >;
 export interface WorldEvent {
@@ -221,6 +247,7 @@ export interface RunManifest {
   clockPolicy: "freeze-during-downtime";
   actorMode: "operator-fixture" | "autonomous";
   agent?: import("./agents").AgentConfiguration;
+  agents?: import("./agents").AgentConfiguration[];
   agentRuntime?: typeof import("./agents").agentPolicy;
   modelRoles: Record<string, string>;
   promptVersion: string | null;

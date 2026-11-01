@@ -1,5 +1,6 @@
 import {
   contentHash,
+  activeConversation,
   type AgentGuard,
   type Command,
   type Receipt,
@@ -10,6 +11,7 @@ import { citizenView } from "@repo/engine";
 import {
   AgentStore,
   ThinkingError,
+  isTransientDatabaseError,
   type WorldStore,
   type MemoryStore,
 } from "@repo/storage";
@@ -391,6 +393,7 @@ export class ToolBroker {
       const longAction = ["move", "interact", "wait", "sleep"].includes(
         action.kind,
       );
+      const conversation = activeConversation(result.state, citizenId);
       const personal = await this.agents.personalEvidence(
         runId,
         citizenId,
@@ -401,9 +404,15 @@ export class ToolBroker {
         status: result.receipt.status,
         reason: result.receipt.reason,
         yield:
-          longAction &&
-          result.receipt.status === "accepted" &&
-          job?.status === "running",
+          (result.receipt.status === "accepted" &&
+            (action.kind === "conversation-start" ||
+              action.kind === "conversation-reply") &&
+            Boolean(
+              conversation && conversation.nextSpeakerId !== citizenId,
+            )) ||
+          (longAction &&
+            result.receipt.status === "accepted" &&
+            job?.status === "running"),
         data: {
           receipt: result.receipt,
           asOfSequence: result.state.sequence,
@@ -415,11 +424,17 @@ export class ToolBroker {
           },
           planVersion: citizen.plan?.version ?? 0,
           job: jobView(job),
+          conversation,
           observations: personal,
         },
       };
     } catch (error) {
       if (error instanceof ThinkingError) throw error;
+      if (isTransientDatabaseError(error))
+        throw new ThinkingError(
+          "paused",
+          "Temporary database interruption; retry this saved tool request.",
+        );
       // Ownership conflicts must be retried with the saved response, not treated as a citizen mistake.
       if (error instanceof Error && /ownership/i.test(error.message))
         throw new ThinkingError("paused", "Waiting for world ownership.");

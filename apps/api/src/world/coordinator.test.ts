@@ -18,6 +18,9 @@ test("a clock tick queued behind Pause cannot advance the paused world", async (
     enteredPause = resolve;
   });
   const store = {
+    async hasReadyThinking() {
+      return false;
+    },
     async claim() {
       return 1;
     },
@@ -66,6 +69,49 @@ test("a clock tick queued behind Pause cannot advance the paused world", async (
     expect(state).toMatchObject({ status: "paused", simTimeMs: before });
   } finally {
     releasePause();
+    await coordinator.stop();
+  }
+});
+
+test("automatic time waits for ready cognition so a model can react before the next tile", async () => {
+  let state = createWorld(scenario, "cognition-clock-fixture");
+  state.status = "running";
+  const start = state.simTimeMs;
+  let thinking = true;
+  const store = {
+    async claim() {
+      return 1;
+    },
+    async recoverableRuns() {
+      return [{ id: state.runId }];
+    },
+    async load() {
+      return { state };
+    },
+    async hasReadyThinking() {
+      return thinking;
+    },
+    async execute(
+      _id: string,
+      _owner: string,
+      _generation: number,
+      command: Command,
+    ) {
+      const result = applyCommand(state, command);
+      state = result.state;
+      return result;
+    },
+    async release() {},
+  };
+  const coordinator = new Coordinator(store as unknown as WorldStore);
+  try {
+    await coordinator.start();
+    await Bun.sleep(runtimePolicy.tickIntervalMs + 80);
+    expect(state.simTimeMs).toBe(start);
+    thinking = false;
+    await Bun.sleep(runtimePolicy.tickIntervalMs + 80);
+    expect(state.simTimeMs).toBeGreaterThan(start);
+  } finally {
     await coordinator.stop();
   }
 });

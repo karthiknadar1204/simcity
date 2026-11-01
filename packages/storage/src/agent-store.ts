@@ -421,7 +421,12 @@ export class AgentStore {
       const nextReviewAtMs = reviewDeadline(run.state, guard.citizenId);
       await tx
         .update(thinkingTurns)
-        .set({ outcome, ownerId: null, leaseUntil: null })
+        .set({
+          outcome,
+          finishedSequence: run.sequence,
+          ownerId: null,
+          leaseUntil: null,
+        })
         .where(eq(thinkingTurns.id, guard.taskId));
       await tx
         .update(backgroundTasks)
@@ -477,7 +482,7 @@ export class AgentStore {
         );
     });
   }
-  async candidates() {
+  async candidates(allowFixtures = false, runId?: string) {
     return this.db
       .select({ id: backgroundTasks.id })
       .from(backgroundTasks)
@@ -496,7 +501,10 @@ export class AgentStore {
           inArray(backgroundTasks.status, ["pending", "queued", "running"]),
           eq(runs.status, "running"),
           eq(agentControls.status, "active"),
-          sql`${agentControls.configuration}->>'provider' = 'openai'`,
+          allowFixtures
+            ? undefined
+            : sql`${agentControls.configuration}->>'provider' = 'openai'`,
+          runId ? eq(runs.id, runId) : undefined,
           eq(agentControls.taskId, thinkingTurns.id),
           sql`not exists (select 1 from sim_thinking_turns busy join sim_background_tasks busy_task on busy_task.id = busy.id where busy_task.run_id = ${runs.id} and busy.citizen_id = ${thinkingTurns.citizenId} and busy.id <> ${thinkingTurns.id} and busy.owner_id is not null and busy.lease_until > clock_timestamp())`,
           lte(thinkingTurns.availableAtMs, runs.simTimeMs),
@@ -609,7 +617,7 @@ export class AgentStore {
       .limit(1);
     return row?.payload ?? null;
   }
-  async status(runId: string, citizenId: string) {
+  async status(runId: string, citizenId: string, asOf?: number) {
     const [control] = await this.db
       .select()
       .from(agentControls)
@@ -632,6 +640,9 @@ export class AgentStore {
         and(
           eq(backgroundTasks.runId, runId),
           eq(thinkingTurns.citizenId, citizenId),
+          asOf !== undefined
+            ? lte(thinkingTurns.finishedSequence, asOf)
+            : undefined,
         ),
       )
       .orderBy(desc(backgroundTasks.createdAt))
@@ -644,10 +655,24 @@ export class AgentStore {
         rounds: (await this.rounds(turn.id)).map(({ request, ...round }) => ({
           ...round,
           inputTokens: request.inputTokens,
+          request,
         })),
       })),
     );
-    return { control, budget, turns: recent };
+    return {
+      control:
+        asOf === undefined
+          ? control
+          : {
+              ...control,
+              status: "historical",
+              error: null,
+              taskId: null,
+              pendingReasons: [],
+            },
+      budget: asOf === undefined ? budget : null,
+      turns: recent,
+    };
   }
   async retry(runId: string, citizenId: string) {
     return this.db.transaction(async (tx) => {

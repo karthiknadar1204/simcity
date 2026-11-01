@@ -1,3 +1,4 @@
+import { recordingRoutes } from "./recordings";
 import { Hono } from "hono";
 import { bearerAuth } from "hono/bearer-auth";
 import { HTTPException } from "hono/http-exception";
@@ -91,6 +92,7 @@ export function worldRoutes(
       500,
     );
   });
+  if (store) app.route("/", recordingRoutes(store.db));
   app.get("/scenarios", async (c) =>
     c.json({
       scenarios: (await loadScenarios()).map((s) => ({
@@ -112,16 +114,25 @@ export function worldRoutes(
       scenarioId?: string;
       autonomous?: boolean;
       citizenId?: string;
+      citizenIds?: string[];
     }>();
     if (
       !body ||
       typeof body !== "object" ||
       typeof body.scenarioId !== "string" ||
       Object.keys(body).some(
-        (key) => !["scenarioId", "autonomous", "citizenId"].includes(key),
+        (key) =>
+          !["scenarioId", "autonomous", "citizenId", "citizenIds"].includes(
+            key,
+          ),
       ) ||
       (body.autonomous !== undefined && typeof body.autonomous !== "boolean") ||
-      (body.citizenId !== undefined && typeof body.citizenId !== "string")
+      (body.citizenId !== undefined && typeof body.citizenId !== "string") ||
+      (body.citizenIds !== undefined &&
+        (!Array.isArray(body.citizenIds) ||
+          !body.citizenIds.length ||
+          body.citizenIds.some((id) => typeof id !== "string"))) ||
+      (body.citizenId !== undefined && body.citizenIds !== undefined)
     )
       throw new StoreError(
         "Supply a scenarioId and optional autonomous/citizenId fields.",
@@ -131,7 +142,7 @@ export function worldRoutes(
       (s) => s.id === body.scenarioId,
     );
     if (!scenario) throw new StoreError("Scenario not found.", 404);
-    let agent: AgentConfiguration | undefined;
+    let agent: AgentConfiguration[] | undefined;
     if (body.autonomous) {
       if (!cognition?.ready)
         throw new StoreError(
@@ -143,17 +154,22 @@ export function worldRoutes(
           "Actor model has no verified pricing profile.",
           400,
         );
-      agent = {
+      agent = (
+        body.citizenIds ??
+        (body.citizenId
+          ? [body.citizenId]
+          : scenario.citizens.slice(0, 3).map((citizen) => citizen.id))
+      ).map((citizenId) => ({
         provider: "openai",
-        citizenId: body.citizenId || scenario.citizens[0]!.id,
+        citizenId,
         model: cognition.defaultModel,
         spendingLimitMicroUsd: agentPolicy.spendingLimitMicroUsd,
         maxRequests: agentPolicy.maxRequests,
         memory: true,
-      };
+      }));
     }
     const { revision, provenance } = await runProvenance(
-      body.autonomous ? "phase-3" : "baseline",
+      body.autonomous ? "phase-4" : "baseline",
     );
     return c.json(
       await service().store.create(scenario, revision, provenance, agent),
@@ -162,11 +178,15 @@ export function worldRoutes(
   });
   app.get("/runs/:id/citizens/:citizenId/thinking", async (c) => {
     if (!cognition) return c.json({ thinking: null });
-    await service().store.current(c.req.param("id"));
+    const { state } = await service().store.current(c.req.param("id"));
+    const asOf = c.req.query("asOf");
     return c.json({
       thinking: await cognition.agents.status(
         c.req.param("id"),
         c.req.param("citizenId"),
+        asOf === undefined
+          ? undefined
+          : integer(asOf, state.sequence, state.sequence),
       ),
     });
   });
@@ -303,9 +323,17 @@ export function worldRoutes(
           const { state } = await store.current(c.req.param("id"));
           if (state.sequence !== sequence) {
             await stream.writeSSE({
-              event: "world",
+              event: "frame",
               id: String(state.sequence),
-              data: JSON.stringify(state),
+              data: JSON.stringify({
+                state,
+                events:
+                  sequence >= 0
+                    ? (await store.history(state.runId, sequence, 501)).filter(
+                        (event) => event.sequence <= state.sequence,
+                      )
+                    : [],
+              }),
             });
             sequence = state.sequence;
             keepAliveAt = Date.now();

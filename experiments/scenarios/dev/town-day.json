@@ -1,0 +1,432 @@
+{
+  "version": 1,
+  "id": "town-day-v1",
+  "name": "A day in town",
+  "seed": 42,
+  "startTimeMs": 25200000,
+  "speed": 1,
+  "map": {
+    "width": 24,
+    "height": 16,
+    "tileSize": 32,
+    "blocked": [
+      {
+        "x": 12,
+        "y": 1
+      },
+      {
+        "x": 12,
+        "y": 2
+      },
+      {
+        "x": 12,
+        "y": 3
+      },
+      {
+        "x": 12,
+        "y": 4
+      },
+      {
+        "x": 12,
+        "y": 6
+      },
+      {
+        "x": 12,
+        "y": 7
+      },
+      {
+        "x": 12,
+        "y": 8
+      },
+      {
+        "x": 12,
+        "y": 9
+      },
+      {
+        "x": 12,
+        "y": 10
+      },
+      {
+        "x": 12,
+        "y": 11
+      },
+      {
+        "x": 12,
+        "y": 13
+      }
+    ]
+  },
+  "rules": {
+    "dayLengthMs": 86400000,
+    "checkpointIntervalMs": 300000,
+    "checkpointEventInterval": 1000,
+    "maxAdvanceMs": 600000,
+    "maxEventsPerTransition": 10000,
+    "hungerPerTick": 1,
+    "energyPerTick": 1,
+    "sleepRecoveryPerTick": 2,
+    "metabolismIntervalMs": 60000
+  },
+  "citizens": [
+    {
+      "id": "mira",
+      "name": "Mira",
+      "biography": "A practical resident who enjoys growing food and meeting neighbors.",
+      "motivations": [
+        "Stay healthy",
+        "Explore useful places",
+        "Help with shared projects"
+      ],
+      "position": {
+        "x": 9,
+        "y": 8
+      },
+      "inventory": {
+        "food": 2
+      },
+      "capacity": 24,
+      "needs": {
+        "hunger": 150,
+        "energy": 850
+      },
+      "visionRadius": 5,
+      "hearingRadius": 4,
+      "moveDurationMs": 400,
+      "knownEntityIds": [
+        "mira",
+        "iris",
+        "klaus",
+        "garden",
+        "storehouse",
+        "fence",
+        "meeting",
+        "mira-bed",
+        "iris-bed",
+        "klaus-bed",
+        "cafe"
+      ],
+      "initialMemories": ["I arrived in this town and learned the public map."],
+      "actionId": null,
+      "facing": "down",
+      "dailyRhythm": {
+        "sleepMinute": 1320,
+        "wakeMinute": 420
+      }
+    },
+    {
+      "id": "iris",
+      "name": "Iris",
+      "biography": "A cook who values reliable arrangements and experiments with meals.",
+      "motivations": ["Prepare meals", "Keep commitments", "Talk to neighbors"],
+      "position": {
+        "x": 10,
+        "y": 8
+      },
+      "inventory": {
+        "food": 2
+      },
+      "capacity": 24,
+      "needs": {
+        "hunger": 150,
+        "energy": 850
+      },
+      "visionRadius": 5,
+      "hearingRadius": 4,
+      "moveDurationMs": 400,
+      "knownEntityIds": [
+        "mira",
+        "iris",
+        "klaus",
+        "garden",
+        "storehouse",
+        "fence",
+        "meeting",
+        "mira-bed",
+        "iris-bed",
+        "klaus-bed",
+        "cafe"
+      ],
+      "initialMemories": ["I arrived in this town and learned the public map."],
+      "actionId": null,
+      "facing": "down",
+      "dailyRhythm": {
+        "sleepMinute": 1320,
+        "wakeMinute": 420
+      }
+    },
+    {
+      "id": "klaus",
+      "name": "Klaus",
+      "biography": "A craftsperson who likes repairing things and quiet walks.",
+      "motivations": [
+        "Maintain the town",
+        "Learn useful routines",
+        "Rest when tired"
+      ],
+      "position": {
+        "x": 9,
+        "y": 9
+      },
+      "inventory": {
+        "food": 2
+      },
+      "capacity": 24,
+      "needs": {
+        "hunger": 150,
+        "energy": 850
+      },
+      "visionRadius": 5,
+      "hearingRadius": 4,
+      "moveDurationMs": 400,
+      "knownEntityIds": [
+        "mira",
+        "iris",
+        "klaus",
+        "garden",
+        "storehouse",
+        "fence",
+        "meeting",
+        "mira-bed",
+        "iris-bed",
+        "klaus-bed",
+        "cafe"
+      ],
+      "initialMemories": ["I arrived in this town and learned the public map."],
+      "actionId": null,
+      "facing": "down",
+      "dailyRhythm": {
+        "sleepMinute": 1320,
+        "wakeMinute": 420
+      }
+    }
+  ],
+  "objects": [
+    {
+      "id": "garden",
+      "name": "Garden",
+      "position": {
+        "x": 4,
+        "y": 11
+      },
+      "tags": ["garden"],
+      "ownerId": null,
+      "inventory": {
+        "food": 30
+      },
+      "capabilities": [
+        {
+          "id": "harvest",
+          "label": "Harvest food",
+          "durationMs": 600000,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {
+            "food": 1
+          },
+          "objectOutputs": {},
+          "needs": {
+            "hunger": 0,
+            "energy": -2
+          },
+          "progressDelta": 0
+        }
+      ],
+      "progress": 0,
+      "regeneration": {
+        "resource": "food",
+        "intervalMs": 60000,
+        "amount": 2,
+        "maximum": 40,
+        "probability": 0.7,
+        "nextAt": 25260000
+      }
+    },
+    {
+      "id": "storehouse",
+      "name": "Storehouse",
+      "position": {
+        "x": 9,
+        "y": 4
+      },
+      "tags": ["storehouse"],
+      "ownerId": null,
+      "inventory": {
+        "food": 16
+      },
+      "capabilities": [
+        {
+          "id": "take-food",
+          "label": "Collect food",
+          "durationMs": 600,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {
+            "food": 1
+          },
+          "objectOutputs": {},
+          "needs": {
+            "hunger": 0,
+            "energy": 0
+          },
+          "progressDelta": 0
+        },
+        {
+          "id": "eat",
+          "label": "Eat a portion",
+          "durationMs": 1000,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {},
+          "objectOutputs": {},
+          "needs": {
+            "hunger": -120,
+            "energy": 8
+          },
+          "progressDelta": 0
+        }
+      ],
+      "progress": 0
+    },
+    {
+      "id": "fence",
+      "name": "Fence",
+      "position": {
+        "x": 17,
+        "y": 10
+      },
+      "tags": ["repairable"],
+      "ownerId": null,
+      "inventory": {
+        "wood": 8
+      },
+      "capabilities": [
+        {
+          "id": "repair",
+          "label": "Repair fence",
+          "durationMs": 1800000,
+          "actorInputs": {},
+          "objectInputs": {
+            "wood": 1
+          },
+          "actorOutputs": {},
+          "objectOutputs": {},
+          "needs": {
+            "hunger": 0,
+            "energy": -5
+          },
+          "progressDelta": 1
+        }
+      ],
+      "progress": 0
+    },
+    {
+      "id": "meeting",
+      "name": "Meeting square",
+      "position": {
+        "x": 11,
+        "y": 8
+      },
+      "tags": ["meeting"],
+      "ownerId": null,
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "mira-bed",
+      "name": "Mira's home",
+      "position": {
+        "x": 3,
+        "y": 4
+      },
+      "tags": ["bed"],
+      "ownerId": "mira",
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "iris-bed",
+      "name": "Iris's home",
+      "position": {
+        "x": 11,
+        "y": 8
+      },
+      "tags": ["bed"],
+      "ownerId": "iris",
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "klaus-bed",
+      "name": "Klaus's home",
+      "position": {
+        "x": 18,
+        "y": 4
+      },
+      "tags": ["bed"],
+      "ownerId": "klaus",
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "cafe",
+      "name": "Town kitchen",
+      "position": {
+        "x": 8,
+        "y": 8
+      },
+      "tags": ["kitchen", "cafe"],
+      "ownerId": null,
+      "inventory": {
+        "food": 30,
+        "meal": 8
+      },
+      "progress": 0,
+      "capabilities": [
+        {
+          "id": "prepare-meal",
+          "label": "Prepare a meal",
+          "durationMs": 900000,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {},
+          "objectOutputs": {
+            "meal": 1
+          },
+          "needs": {
+            "hunger": 0,
+            "energy": -10
+          },
+          "progressDelta": 1
+        },
+        {
+          "id": "eat-meal",
+          "label": "Eat a meal",
+          "durationMs": 900000,
+          "actorInputs": {},
+          "objectInputs": {
+            "meal": 1
+          },
+          "actorOutputs": {},
+          "objectOutputs": {},
+          "needs": {
+            "hunger": -300,
+            "energy": 20
+          },
+          "progressDelta": 0
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import type {
   WorldState,
 } from "@repo/contracts";
 import { distance, lineOfSight } from "./geometry";
+import { activeConversation } from "@repo/contracts";
 
 export function perceive(world: WorldState, event: WorldEvent): Observation[] {
   if (!event.position) return [];
@@ -75,6 +76,10 @@ export function citizenView(world: WorldState, citizenId: string) {
         name: c.name,
         position: c.position,
         facing: c.facing,
+        activity: c.actionId
+          ? (world.jobs[c.actionId]?.kind ?? "idle")
+          : "idle",
+        conversationAvailable: !activeConversation(world, c.id),
       })),
     objects: Object.values(world.objects)
       .filter((o) => visible(o.position))

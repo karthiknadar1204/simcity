@@ -8,7 +8,7 @@ import {
   outbox,
   runs,
 } from "@repo/db/tables";
-import { createArchiveStore } from "@repo/storage";
+import { createArchiveStore, RecordingStore } from "@repo/storage";
 import {
   contentHash,
   runtimePolicy,
@@ -132,7 +132,10 @@ export async function dispatchOutbox(
     .from(backgroundTasks)
     .where(
       and(
-        eq(backgroundTasks.kind, "archive.checkpoint"),
+        inArray(backgroundTasks.kind, [
+          "archive.checkpoint",
+          "archive.interval",
+        ]),
         inArray(backgroundTasks.status, ["pending", "queued"]),
         taskIds ? inArray(backgroundTasks.id, taskIds) : undefined,
       ),
@@ -192,6 +195,30 @@ export function createArchiveWorker(
         .where(eq(backgroundTasks.id, job.data.taskId))
         .limit(1);
       if (!task || task.status === "completed") return;
+      if (task.kind === "archive.interval" && "fromSequence" in task.payload) {
+        if (task.attempts >= runtimePolicy.archiveAttempts)
+          throw new Error("Recording retry budget exhausted.");
+        await db
+          .update(backgroundTasks)
+          .set({ attempts: sql`${backgroundTasks.attempts}+1` })
+          .where(eq(backgroundTasks.id, task.id));
+        try {
+          await new RecordingStore(db).publish(task.id, task.payload, archive);
+        } catch {
+          await db
+            .update(backgroundTasks)
+            .set({
+              status:
+                task.attempts + 1 >= runtimePolicy.archiveAttempts
+                  ? "failed"
+                  : "queued",
+              error: "Recording archive failed; hot data retained.",
+            })
+            .where(eq(backgroundTasks.id, task.id));
+          throw new Error("Recording archive failed.");
+        }
+        return;
+      }
       if (task.kind !== "archive.checkpoint" || !("sequence" in task.payload))
         throw new Error("Wrong task routed to archive queue.");
       const payload = task.payload;
@@ -283,3 +310,6 @@ export function createArchiveWorker(
     },
   };
 }
+
+export function createMediaQueue(redisUrl:string){return createArchiveQueue(redisUrl,queueNames.media)}
+export function createMediaWorker(redisUrl:string,processTask:(id:string)=>Promise<void>){return createTaskWorker(redisUrl,queueNames.media,processTask,1,60000)}

@@ -1,6 +1,8 @@
 export * from "./types";
 export * from "./agents";
 export * from "./memory";
+export * from "./social";
+export * from "./recording";
 import { planProposalSchema } from "./agents";
 export { runtimePolicy } from "./runtime";
 import type { Scenario, Command } from "./types";
@@ -46,6 +48,12 @@ const citizen = z.strictObject({
   initialMemories: z.array(z.string().max(4000)).max(100),
   actionId: z.null(),
   facing: z.enum(["up", "down", "left", "right"]),
+  dailyRhythm: z
+    .strictObject({
+      sleepMinute: integer.max(1439),
+      wakeMinute: integer.max(1439),
+    })
+    .optional(),
 });
 const object = z.strictObject({
   id,
@@ -141,6 +149,33 @@ export function parseScenario(input: unknown): Scenario {
 }
 
 const actionSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("conversation-start"),
+    actorId: id,
+    targetId: id,
+    text: z.string().trim().min(1).max(2000),
+  }),
+  z.strictObject({
+    kind: z.literal("conversation-reply"),
+    actorId: id,
+    conversationId: id,
+    expectedVersion: positive,
+    text: z.string().trim().min(1).max(2000),
+    end: z.boolean(),
+  }),
+  z.strictObject({
+    kind: z.literal("conversation-end"),
+    actorId: id,
+    conversationId: id,
+    expectedVersion: positive,
+    reason: z.string().min(1).max(160),
+  }),
+  z.strictObject({
+    kind: z.literal("alert"),
+    actorId: id,
+    targetId: id,
+    text: z.string().trim().min(1).max(2000),
+  }),
   z.strictObject({
     kind: z.literal("plan"),
     actorId: id,

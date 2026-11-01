@@ -1,4 +1,9 @@
-import { agentPolicy, type WorldEvent, type WorldState } from "@repo/contracts";
+import {
+  agentPolicy,
+  activeConversation,
+  type WorldEvent,
+  type WorldState,
+} from "@repo/contracts";
 import { citizenView, applyEvent, perceive } from "@repo/engine";
 
 export function reviewDeadline(state: WorldState, citizenId: string) {
@@ -7,6 +12,10 @@ export function reviewDeadline(state: WorldState, citizenId: string) {
   const requested = citizen.plan?.nextReviewAtMs ?? fallback;
   const deadline = requested > state.simTimeMs ? requested : fallback;
   const job = citizen.actionId ? state.jobs[citizen.actionId] : null;
+  const conversation = activeConversation(state, citizenId);
+  if (conversation && conversation.nextSpeakerId !== citizenId)
+    return conversation.expiresAtMs;
+  if (job && job.kind !== "move") return job.endsAt;
   return job?.status === "running" ? deadline : Math.min(deadline, fallback);
 }
 
@@ -27,6 +36,9 @@ export function decisionTriggers(
     if (received) {
       if (event.kind === "speech.delivered" && event.actorId !== citizenId)
         reasons.add("message");
+      if (event.kind === "alert.delivered") reasons.add("urgent-message");
+      if (event.kind === "conversation.ended")
+        reasons.add("conversation-ended");
       if (
         ["action.completed", "action.failed", "action.interrupted"].includes(
           event.kind,

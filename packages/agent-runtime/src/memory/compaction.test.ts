@@ -30,7 +30,7 @@ test("round compaction removes optional copies while preserving exact calls, err
     },
   ];
   const result = boundedRequest(context, history, false);
-  expect(result.inputTokens).toBeLessThanOrEqual(8000);
+  expect(result.inputTokens).toBeLessThanOrEqual(16000);
   expect(result.history).toEqual(history);
   expect(JSON.parse(result.context).obligations.current[0].deadlineMs).toBe(
     68400000,
@@ -54,4 +54,30 @@ test("an oversized essential receipt fails explicitly", () => {
       false,
     ),
   ).toThrow("Essential");
+});
+test("a decision retains several exact dialogue receipts within its separate tool headroom", () => {
+  const history = Array.from({ length: 5 }, (_, i) => ({
+    type: "function_call_output",
+    call_id: `call-${i}`,
+    output: JSON.stringify({
+      receipt: { status: "accepted", eventSequence: i },
+      conversation: {
+        turns: Array.from({ length: 6 }, () => ({
+          text: "I will check the available food and return when my current activity ends. ".repeat(
+            16,
+          ),
+        })),
+      },
+    }),
+  }));
+  const result = boundedRequest(
+    {
+      obligations: { current: [] },
+      memories: { retrieved: [], evidence: [], recent: [], initial: [] },
+    },
+    history,
+    false,
+  );
+  expect(result.history).toEqual(history);
+  expect(result.inputTokens).toBeLessThanOrEqual(16000);
 });

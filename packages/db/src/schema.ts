@@ -28,6 +28,10 @@ import type {
   MemoryTaskPayload,
   MemoryCallRequest,
   MemoryCallAnswer,
+  RecordingPayload,
+  VideoPayload,
+  RecordingDescriptor,
+  MediaFile,
 } from "@repo/contracts";
 
 export const runs = pgTable(
@@ -129,10 +133,18 @@ export const backgroundTasks = pgTable(
         "memory.extract",
         "memory.embed",
         "memory.consolidate",
+        "archive.interval",
+        "media.export",
       ],
     }).notNull(),
     payload: jsonb("payload")
-      .$type<ArchivePayload | ThinkingPayload | MemoryTaskPayload>()
+      .$type<
+        | ArchivePayload
+        | ThinkingPayload
+        | MemoryTaskPayload
+        | RecordingPayload
+        | VideoPayload
+      >()
       .notNull(),
     status: text("status", {
       enum: [
@@ -188,6 +200,7 @@ export const agentBudgets = pgTable("sim_agent_budgets", {
 });
 
 export const thinkingTurns = pgTable("sim_thinking_turns", {
+  finishedSequence: bigint("finished_sequence", { mode: "number" }),
   id: text("id")
     .primaryKey()
     .references(() => backgroundTasks.id, { onDelete: "cascade" }),
@@ -563,3 +576,45 @@ export const contextCompilations = pgTable("sim_context_compilations", {
   boundary: bigint("boundary", { mode: "number" }).notNull(),
   audit: jsonb("audit").$type<RetrievalAudit>().notNull(),
 });
+
+export const recordingChunks = pgTable(
+  "sim_recording_chunks",
+  {
+    id: text("id")
+      .primaryKey()
+      .references(() => backgroundTasks.id, { onDelete: "cascade" }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    fromSequence: bigint("from_sequence", { mode: "number" }).notNull(),
+    toSequence: bigint("to_sequence", { mode: "number" }).notNull(),
+    startMs: bigint("start_ms", { mode: "number" }).notNull(),
+    endMs: bigint("end_ms", { mode: "number" }).notNull(),
+    manifest: jsonb("manifest").$type<RecordingDescriptor>(),
+  },
+  (table) => [
+    index("sim_recording_interval_idx").on(
+      table.runId,
+      table.fromSequence,
+      table.toSequence,
+    ),
+  ],
+);
+export const videoExports = pgTable(
+  "sim_video_exports",
+  {
+    id: text("id")
+      .primaryKey()
+      .references(() => backgroundTasks.id, { onDelete: "cascade" }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => runs.id, { onDelete: "cascade" }),
+    payload: jsonb("payload").$type<VideoPayload>().notNull(),
+    files: jsonb("files").$type<MediaFile[]>(),
+    ownerId: text("owner_id"),
+    generation: integer("generation").notNull().default(0),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  },
+  (table) => [index("sim_video_exports_run_idx").on(table.runId, table.id)],
+);

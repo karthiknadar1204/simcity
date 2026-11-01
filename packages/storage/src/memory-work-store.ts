@@ -3,6 +3,7 @@ import {
   memoryPolicy,
   agentPolicy,
   stableStringify,
+  configuredAgents,
   type AgentGuard,
   type MemoryCallRequest,
   type MemoryCallAnswer,
@@ -101,6 +102,9 @@ export class MemoryWorkStore {
     const payload = task.payload;
     return this.db.transaction(async (tx) => {
       const run = await this.lockRun(tx, task.runId);
+      const configuration = configuredAgents(run.manifest).find(
+        (item) => item.citizenId === payload.citizenId,
+      );
       const [job] = await tx
         .select({
           task: memoryTasks,
@@ -115,8 +119,8 @@ export class MemoryWorkStore {
       if (
         !job ||
         !["pending", "queued", "running"].includes(job.status) ||
-        !run.manifest.agent?.memory ||
-        (!allowFixture && run.manifest.agent.provider !== "openai") ||
+        !configuration?.memory ||
+        (!allowFixture && configuration.provider !== "openai") ||
         (job.task.ownerId && job.live)
       )
         return null;
@@ -425,11 +429,8 @@ export class MemoryWorkStore {
       .where(
         and(
           inArray(backgroundTasks.status, ["pending", "queued", "running"]),
-          allowFixtures
-            ? undefined
-            : sql`${runs.manifest}->'agent'->>'provider' = 'openai'`,
+          sql`exists (select 1 from jsonb_array_elements(coalesce(${runs.manifest}->'agents',jsonb_build_array(${runs.manifest}->'agent'))) cfg where cfg->>'citizenId' = ${memoryTasks.citizenId} and cfg->>'memory' = 'true' ${allowFixtures ? sql`` : sql`and cfg->>'provider' = 'openai'`})`,
           runId ? eq(runs.id, runId) : undefined,
-          sql`${runs.manifest}->'agent'->>'memory' = 'true'`,
           or(
             isNull(memoryTasks.leaseUntil),
             lte(memoryTasks.leaseUntil, sql`clock_timestamp()`),

@@ -3,7 +3,8 @@ import { workspaceRoot } from "@repo/db/env";
 import { contentHash, type RunProvenance } from "@repo/contracts";
 
 export async function runProvenance(
-  protocolName: "baseline" | "phase-2" | "phase-3" = "baseline",
+  protocolName:
+    "baseline" | "phase-2" | "phase-3" | "phase-4" | "phase-5" = "baseline",
 ): Promise<{
   revision: string;
   provenance: RunProvenance;

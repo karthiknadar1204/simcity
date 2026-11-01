@@ -9,6 +9,6 @@ export const runtimePolicy = {
   archiveAttempts: 5,
   archiveConcurrency: 2,
   archiveBackoffMs: 1000,
-  databaseSchema: "drizzle-0003",
+  databaseSchema: "drizzle-0004",
   maxConcurrentTransitionsPerRun: 1,
 } as const;

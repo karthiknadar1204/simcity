@@ -28,6 +28,9 @@ export function applyEvent(state: WorldState, event: WorldEvent): WorldState {
     citizens: { ...state.citizens, ...patch.citizens },
     objects: { ...state.objects, ...patch.objects },
     jobs: { ...state.jobs, ...patch.jobs },
+    ...(state.conversations || patch.conversations
+      ? { conversations: { ...state.conversations, ...patch.conversations } }
+      : {}),
     sequence: event.sequence,
   };
 }

@@ -77,12 +77,29 @@ export class Coordinator {
           await this.serialize(id, async () => {
             const current = this.owned.get(id);
             if (this.stopping || current?.state.status !== "running") return;
+            if (await this.store.hasReadyThinking(id, current.state.simTimeMs))
+              return;
+            const nextPhysical = Math.min(
+              ...Object.values(current.state.jobs)
+                .filter((job) => job.status === "running")
+                .map(
+                  (job) =>
+                    (job.kind === "move" ? job.nextStepAt : job.endsAt) -
+                    current.state.simTimeMs,
+                ),
+            );
             return this.commit(id, {
               id: crypto.randomUUID(),
               action: {
                 kind: "advance",
-                durationMs: Math.round(
-                  runtimePolicy.tickIntervalMs * current.state.speed,
+                durationMs: Math.max(
+                  1,
+                  Math.min(
+                    nextPhysical,
+                    Math.round(
+                      runtimePolicy.tickIntervalMs * current.state.speed,
+                    ),
+                  ),
                 ),
               },
             });

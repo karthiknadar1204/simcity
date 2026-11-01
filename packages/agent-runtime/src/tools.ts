@@ -10,6 +10,35 @@ import type { FunctionTool } from "openai/resources/responses/responses";
 const id = z.string().min(1).max(160);
 const whole = z.number().int().nonnegative();
 const definitions = {
+  social_start: {
+    description:
+      "Invite one nearby awake person into a bounded conversation. Your text is your own first utterance; their response is decided independently. Yields to their turn.",
+    schema: z.strictObject({ targetId: id, text: z.string().min(1).max(2000) }),
+  },
+  social_reply: {
+    description:
+      "Speak your own turn in your active conversation using its current version. end=true closes the exchange after this actual message. Yields when waiting for the other speaker.",
+    schema: z.strictObject({
+      conversationId: id,
+      expectedVersion: whole.min(1),
+      text: z.string().min(1).max(2000),
+      end: z.boolean(),
+    }),
+  },
+  social_end: {
+    description:
+      "Decline or leave your conversation without speaking for the other participant. Releases your social claim.",
+    schema: z.strictObject({
+      conversationId: id,
+      expectedVersion: whole.min(1),
+      reason: z.string().min(1).max(160),
+    }),
+  },
+  social_alert: {
+    description:
+      "Deliver an explicitly urgent alert to an adjacent citizen. Can wake that person from sleep. Use for an actual urgent personal reason, not ordinary conversation.",
+    schema: z.strictObject({ targetId: id, text: z.string().min(1).max(2000) }),
+  },
   world_observe: {
     description:
       "Read your permitted surroundings, needs, inventory and current activity.",
@@ -62,7 +91,7 @@ const definitions = {
   },
   social_say: {
     description:
-      "Speak audibly nearby. audienceIds null broadcasts; named recipients must be nearby and awake.",
+      "Make a one-off audible announcement. For a turn-taking conversation use social_start/social_reply. audienceIds null broadcasts; named recipients must be nearby and awake.",
     schema: z.strictObject({
       text: z.string().min(1).max(2000),
       audienceIds: z.array(id).min(1).max(20).nullable(),
@@ -72,7 +101,7 @@ const definitions = {
     description:
       "Start an explicit wait on the simulation clock. Yields until completion or a relevant message.",
     schema: z.strictObject({
-      durationMs: z.number().int().min(1000).max(3600000),
+      durationMs: z.number().int().min(1000).max(86400000),
     }),
   },
   time_sleep: {
@@ -147,6 +176,18 @@ export function actionFor(
 ): Action | null {
   let action: unknown;
   switch (name) {
+    case "social_start":
+      action = { kind: "conversation-start", actorId: citizenId, ...args };
+      break;
+    case "social_reply":
+      action = { kind: "conversation-reply", actorId: citizenId, ...args };
+      break;
+    case "social_end":
+      action = { kind: "conversation-end", actorId: citizenId, ...args };
+      break;
+    case "social_alert":
+      action = { kind: "alert", actorId: citizenId, ...args };
+      break;
     case "world_move": {
       const self = state.citizens[citizenId]!;
       const visible = citizenView(state, citizenId).objects.map(

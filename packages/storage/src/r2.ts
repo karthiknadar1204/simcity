@@ -3,7 +3,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 export function createArchiveStore() {
   const {
     R2_ACCOUNT_ID,
@@ -28,30 +28,47 @@ export function createArchiveStore() {
     maxAttempts: 2,
     requestHandler: { connectionTimeout: 5000, requestTimeout: 15000 },
   });
-  const hash = (body: string) =>
+  const hash = (body: Uint8Array) =>
     new Bun.CryptoHasher("sha256").update(body).digest("hex");
+  async function read(key: string, checksum?: string, expectedBytes?: number) {
+    const result = await client.send(
+      new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }),
+    );
+    const bytes = await result.Body?.transformToByteArray();
+    if (
+      !bytes ||
+      (checksum && hash(bytes) !== checksum) ||
+      (expectedBytes !== undefined && bytes.byteLength !== expectedBytes)
+    )
+      throw new Error("Archive checksum or size mismatch.");
+    return bytes;
+  }
+  async function putBytes(key: string, body: Uint8Array, contentType: string) {
+    const checksum = hash(body);
+    await client.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        Metadata: { sha256: checksum },
+      }),
+    );
+    await read(key, checksum, body.byteLength);
+    return { key, checksum, bytes: body.byteLength };
+  }
   return {
-    async put(key: string, body: string) {
-      const checksum = hash(body);
-      await client.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET_NAME,
-          Key: key,
-          Body: body,
-          ContentType: "application/json",
-          Metadata: { sha256: checksum },
-        }),
-      );
-      const readback = await client.send(
+    read,
+    putBytes,
+    put: (key: string, body: string) =>
+      putBytes(key, new TextEncoder().encode(body), "application/json"),
+    signGet: (key: string) =>
+      getSignedUrl(
+        client,
         new GetObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }),
-      );
-      const actual = await readback.Body?.transformToString();
-      if (actual === undefined || hash(actual) !== checksum)
-        throw new Error("Archive checksum mismatch.");
-      return { key, checksum, bytes: Buffer.byteLength(body) };
-    },
-    close() {
-      client.destroy();
-    },
+        { expiresIn: 300 },
+      ),
+    close: () => client.destroy(),
   };
 }
+export type ArchiveStore = NonNullable<ReturnType<typeof createArchiveStore>>;

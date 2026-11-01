@@ -16,6 +16,5 @@ export function createWorld(input: unknown, runId: string): WorldState {
     citizens: Object.fromEntries(scenario.citizens.map((c) => [c.id, c])),
     objects: Object.fromEntries(scenario.objects.map((o) => [o.id, o])),
     jobs: {},
-    receipts: {},
   };
 }

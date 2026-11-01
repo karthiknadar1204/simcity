@@ -64,9 +64,10 @@ export interface Rules {
   checkpointEventInterval: number;
   maxAdvanceMs: number;
   maxEventsPerTransition: number;
-  hungerPerSecond: number;
-  energyPerSecond: number;
-  sleepRecoveryPerSecond: number;
+  metabolismIntervalMs: number;
+  hungerPerTick: number;
+  energyPerTick: number;
+  sleepRecoveryPerTick: number;
 }
 
 export interface Scenario {
@@ -102,6 +103,7 @@ export type Action =
   | { kind: "wait"; actorId: string; durationMs: number }
   | { kind: "sleep"; actorId: string; targetId: string; durationMs: number }
   | { kind: "cancel"; actorId: string }
+  | { kind: "inspect"; actorId: string; targetId: string }
   | { kind: "advance"; durationMs: number }
   | { kind: "set-blocked"; position: Point; blocked: boolean }
   | { kind: "set-status"; status: "running" | "paused" }
@@ -158,7 +160,6 @@ export interface WorldState {
   citizens: Record<string, Citizen>;
   objects: Record<string, WorldObject>;
   jobs: Record<string, ActionJob>;
-  receipts: Record<string, Receipt>;
 }
 
 export type StatePatch = Partial<
@@ -172,7 +173,6 @@ export type StatePatch = Partial<
     | "citizens"
     | "objects"
     | "jobs"
-    | "receipts"
   >
 >;
 export interface WorldEvent {

@@ -62,9 +62,10 @@
     "checkpointEventInterval": 1000,
     "maxAdvanceMs": 600000,
     "maxEventsPerTransition": 10000,
-    "hungerPerSecond": 1,
-    "energyPerSecond": 1,
-    "sleepRecoveryPerSecond": 40
+    "hungerPerTick": 1,
+    "energyPerTick": 1,
+    "sleepRecoveryPerTick": 2,
+    "metabolismIntervalMs": 60000
   },
   "citizens": [
     {

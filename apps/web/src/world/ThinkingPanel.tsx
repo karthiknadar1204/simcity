@@ -124,7 +124,7 @@ export function ThinkingPanel({
               .catch((error) => setMessage(error.message));
           }}
         >
-          Retry saved citizen
+          Retry thinking
         </button>
       )}
       {message && <p className="muted">{message}</p>}
@@ -146,8 +146,9 @@ export function ThinkingPanel({
                   {round.outcome?.reason ? `: ${round.outcome.reason}` : ""}
                 </span>
                 <small>
-                  {round.answer?.inputTokens ?? round.inputTokens} input /{" "}
-                  {round.answer?.outputTokens ?? "pending"} output tokens
+                  {round.answer
+                    ? `${round.answer.inputTokens} input / ${round.answer.outputTokens} output tokens`
+                    : `${round.inputTokens} estimated input tokens · ${round.status === "rejected" ? "request rejected" : round.status === "uncertain" ? "usage unknown" : "output pending"}`}
                 </small>
                 {round.answer?.call && (
                   <details>

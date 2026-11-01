@@ -4,7 +4,7 @@ Phase 2 connects one resident per run to a model. The resident can form and revi
 
 The intended product is an autonomous town in the spirit of [Generative Agents](https://arxiv.org/abs/2304.03442): residents independently observe, remember, plan, act, meet, talk, and influence later behavior. Phase 2's single resident is the first development gate toward that town. General world rules and a finite set of executable mechanics are necessary; specific residents' future choices and social outcomes must not be scripted.
 
-The implementation is present. The [verification report](./phase-2-verification.md) distinguishes passing mechanics tests from the live autonomy gate, which is pending a funded OpenAI request. Nothing in a scripted provider fixture counts as autonomous behavior.
+The implementation is present and live OpenAI inference has been verified with the configured file key. The [verification report](./phase-2-verification.md) distinguishes passing mechanics tests from actual live autonomy evidence. Nothing in a scripted provider fixture counts as autonomous behavior.
 
 ## 1. Where the pieces live
 

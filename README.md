@@ -2,7 +2,7 @@
 
 Phases 0–2 of a persistent citizen simulation. The world can move residents tile by tile, run resource interactions, deliver local speech, sleep, record events, replay history, and resume after a server restart. Phase 2 adds one OpenAI-controlled resident with scoped context, a revisable plan, typed tools, and durable thinking tasks.
 
-Choose an **operator sandbox** or an **AI town**. The engine contains mechanics; scenarios contain people and places. Production code contains no citizen-specific future action sequence. Full episodic/semantic memory, commitments, and sleep consolidation belong to Phase 3. See [Phase 2 behavior](./docs/phase-2.md) and [the verification status](./docs/phase-2-verification.md); funded live inference is still required to pass the autonomy gate.
+Choose an **operator sandbox** or an **AI town**. The engine contains mechanics; scenarios contain people and places. Production code contains no citizen-specific future action sequence. Full episodic/semantic memory, commitments, and sleep consolidation belong to Phase 3. See [Phase 2 behavior](./docs/phase-2.md) and [the verification status](./docs/phase-2-verification.md) for the development gate's actual evidence. Live OpenAI inference has been verified with the configured file key.
 
 ## Start
 
@@ -81,7 +81,7 @@ With the normal development server running and a funded key, the paid developmen
 bun run verify:autonomy
 ```
 
-It creates one capped AI run, checks a self-initiated plan and model-chosen walking, introduces a route blocker and a permitted encounter, and checks subsequent movement and replay. It pauses its own run when finished, including on failure. It never substitutes scripted answers for a failed inference. See the [acceptance protocol](./experiments/protocols/phase-2.json). This gate currently remains blocked by OpenAI's no-credits response.
+It creates one capped AI run, checks a self-initiated plan and model-chosen walking, introduces a route blocker and a permitted encounter, and checks subsequent movement and replay. It pauses its own run when finished, including on failure. It never substitutes scripted answers for a failed inference. See the [acceptance protocol](./experiments/protocols/phase-2.json) and [recorded verification results](./docs/phase-2-verification.md).
 
 ## Database and builds
 

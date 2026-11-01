@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { bearerAuth } from "hono/bearer-auth";
+import { HTTPException } from "hono/http-exception";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { contentHash, parseCommand } from "@repo/contracts";
@@ -52,6 +53,7 @@ export function worldRoutes(
     await next();
   });
   app.onError((error, c) => {
+    if (error instanceof HTTPException) return error.getResponse();
     if (error instanceof StoreError)
       return c.json(
         { error: error.message },

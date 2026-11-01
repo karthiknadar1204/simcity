@@ -25,19 +25,21 @@ export class Coordinator {
     return next;
   }
 
+  private async commit(id: string, command: Command, guard?: AgentGuard) {
+    const generation = await this.store.claim(id, this.ownerId);
+    const result = await this.store.execute(
+      id,
+      this.ownerId,
+      generation,
+      command,
+      guard,
+    );
+    this.owned.set(id, { generation, state: result.state });
+    return result;
+  }
+
   async execute(id: string, command: Command, guard?: AgentGuard) {
-    return this.serialize(id, async () => {
-      const generation = await this.store.claim(id, this.ownerId);
-      const result = await this.store.execute(
-        id,
-        this.ownerId,
-        generation,
-        command,
-        guard,
-      );
-      this.owned.set(id, { generation, state: result.state });
-      return result;
-    });
+    return this.serialize(id, () => this.commit(id, command, guard));
   }
 
   async start() {
@@ -72,14 +74,18 @@ export class Coordinator {
       for (const [id, entry] of this.owned) {
         if (entry.state.status !== "running") continue;
         try {
-          await this.execute(id, {
-            id: crypto.randomUUID(),
-            action: {
-              kind: "advance",
-              durationMs: Math.round(
-                runtimePolicy.tickIntervalMs * entry.state.speed,
-              ),
-            },
+          await this.serialize(id, async () => {
+            const current = this.owned.get(id);
+            if (this.stopping || current?.state.status !== "running") return;
+            return this.commit(id, {
+              id: crypto.randomUUID(),
+              action: {
+                kind: "advance",
+                durationMs: Math.round(
+                  runtimePolicy.tickIntervalMs * current.state.speed,
+                ),
+              },
+            });
           });
         } catch {
           this.owned.delete(id);

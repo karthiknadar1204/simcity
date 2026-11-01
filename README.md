@@ -21,6 +21,14 @@ Open [the town viewer](http://localhost:5173). For manual physics, click **Creat
 
 The root `.env` holds `DATABASE_URL`, `REDIS_URL`, the four `R2_*` variables, and `OPENAI_API_KEY`, as shown in `.env.example`. The API reads Neon and hosts the cognition worker; the archive worker needs Redis and R2. The default actor is pinned to `gpt-5.4-mini-2026-03-17`. Credentials stay on the server. Never add `VITE_` to a secret variable name. Restart the root development command after replacing a key so child processes receive the new environment.
 
+An exported shell key takes precedence over `.env`. If a replaced file key appears ignored, stop development and start it without inherited key overrides:
+
+```sh
+env -u OPENAI_API_KEY -u openai_api_key bun run dev --ui=stream
+```
+
+This removes the inherited values only for the launched process; Bun and the API then load the root `.env`. It does not change your shell configuration or print credentials.
+
 AI runs start paused, with an estimated $1 spending cap and 80 request attempts. A known OpenAI rejection pauses the run, records the error, and releases that request's budget reservation. After resolving an account error, use **Retry thinking**, then **Play**. This application estimates model cost; the provider's billing records remain authoritative.
 
 `redis:start` uses an installed `redis-server`/`redis-cli` and starts a dedicated loopback service on port 6387 by default. Its AOF data is in ignored `.local/redis`, with `appendfsync everysec` and `noeviction`. It is a local daemon, not an automatically installed boot service. Run the command again after a machine restart. A managed Redis URL can be used by the worker directly.

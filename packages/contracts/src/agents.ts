@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const agentPolicy = {
-  version: "phase2-v1",
+  version: "phase2-v2",
   model: "gpt-5.4-mini-2026-03-17",
   promptVersion: "citizen-v1",
   toolVersion: "citizen-tools-v1",

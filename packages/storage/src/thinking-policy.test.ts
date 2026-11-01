@@ -1,7 +1,8 @@
 import { test, expect } from "bun:test";
 import { createWorld, applyCommand } from "@repo/engine";
 import scenario from "../../../experiments/scenarios/dev/town.json";
-import { decisionTriggers } from "./thinking-policy";
+import { decisionTriggers, reviewDeadline } from "./thinking-policy";
+import { agentPolicy } from "@repo/contracts";
 
 test("thinking wakes on a delivered message but not on each clock or walking frame", () => {
   const world = createWorld(scenario, "triggers");
@@ -41,4 +42,40 @@ test("thinking wakes on a delivered message but not on each clock or walking fra
   expect(
     decisionTriggers(move.state, step.state, step.events, actor!.id),
   ).not.toContain("review");
+});
+
+test("an idle resident reviews promptly even when its project has a later review", () => {
+  const state = createWorld(scenario, "idle-review");
+  const self = Object.values(state.citizens)[0]!;
+  self.plan = {
+    dayOutline: [{ window: "Morning", activity: "Explore" }],
+    goal: "Explore",
+    currentActivity: "Choose a useful next activity",
+    knownConstraints: [],
+    steps: ["Choose an action"],
+    cursor: 0,
+    blocker: null,
+    reviewAfterMs: 300000,
+    evidenceIds: [],
+    briefReason: "I am free to act.",
+    version: 1,
+    updatedAtMs: state.simTimeMs,
+    nextReviewAtMs: state.simTimeMs + 300000,
+  };
+  expect(reviewDeadline(state, self.id)).toBe(
+    state.simTimeMs + agentPolicy.idleReviewMs,
+  );
+  const moving = applyCommand(state, {
+    id: "walk",
+    action: {
+      kind: "move",
+      actorId: self.id,
+      destination: { x: self.position.x, y: self.position.y + 3 },
+    },
+  }).state;
+  expect(reviewDeadline(moving, self.id)).toBe(self.plan.nextReviewAtMs);
+  self.plan.nextReviewAtMs = state.simTimeMs - 1;
+  expect(reviewDeadline(state, self.id)).toBe(
+    state.simTimeMs + agentPolicy.idleReviewMs,
+  );
 });

@@ -36,6 +36,7 @@ import {
   ThinkingError,
   type Transaction,
 } from "./thinking-records";
+import { reviewDeadline } from "./thinking-policy";
 
 type RoundRequest = typeof modelRounds.$inferInsert.request;
 export class AgentStore {
@@ -411,11 +412,7 @@ export class AgentStore {
         );
       if (control?.taskId !== guard.taskId || control.version !== guard.version)
         return;
-      const citizen = run.state.citizens[guard.citizenId]!;
-      const nextReviewAtMs = Math.max(
-        run.simTimeMs + agentPolicy.idleReviewMs,
-        citizen.plan?.nextReviewAtMs ?? 0,
-      );
+      const nextReviewAtMs = reviewDeadline(run.state, guard.citizenId);
       await tx
         .update(thinkingTurns)
         .set({ outcome, ownerId: null, leaseUntil: null })

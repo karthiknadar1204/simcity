@@ -1,5 +1,14 @@
-import type { WorldEvent, WorldState } from "@repo/contracts";
+import { agentPolicy, type WorldEvent, type WorldState } from "@repo/contracts";
 import { citizenView, applyEvent, perceive } from "@repo/engine";
+
+export function reviewDeadline(state: WorldState, citizenId: string) {
+  const citizen = state.citizens[citizenId]!;
+  const fallback = state.simTimeMs + agentPolicy.idleReviewMs;
+  const requested = citizen.plan?.nextReviewAtMs ?? fallback;
+  const deadline = requested > state.simTimeMs ? requested : fallback;
+  const job = citizen.actionId ? state.jobs[citizen.actionId] : null;
+  return job?.status === "running" ? deadline : Math.min(deadline, fallback);
+}
 
 export function decisionTriggers(
   before: WorldState,

@@ -220,4 +220,16 @@ export interface RunManifest {
   contextTokenLimit: number;
   spendingLimitUsd: number;
   createdAt: string;
+  // Optional only for compatibility with earlier Phase 1 fixture manifests.
+  configuration?: typeof import("./runtime").runtimePolicy;
+  scenarioVersion?: number;
+  mapHash?: string;
+  profilesHash?: string;
+  provenance?: RunProvenance;
+}
+
+export interface RunProvenance {
+  sourceDirty: boolean | null;
+  dependencyLockHash: string | null;
+  protocol: { id: string; version: number; hash: string } | null;
 }

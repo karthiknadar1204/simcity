@@ -1,5 +1,6 @@
 import { requireDatabaseUrl } from "@repo/db/env";
 import { createDatabase } from "@repo/db";
+import { runtimePolicy } from "@repo/contracts";
 import {
   createArchiveQueue,
   createArchiveWorker,
@@ -30,7 +31,7 @@ async function dispatch() {
 await dispatch();
 const timer = setInterval(() => {
   void dispatch();
-}, 2000);
+}, runtimePolicy.outboxIntervalMs);
 console.log("Checkpoint archive worker and outbox reconciliation are running.");
 
 async function shutdown() {

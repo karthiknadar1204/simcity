@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "id": "held-out-memory-cases-v1",
+  "scenarioId": "unfamiliar-town-v1",
+  "status": "predeclared acceptance cases; memory pipeline not implemented",
+  "ingestionRule": "Ingest permitted evidence only. Never ingest probes, expected answers, or forbidden-source labels.",
+  "cases": [
+    {
+      "id": "accepted-promise",
+      "evidence": [
+        {
+          "id": "p1",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25200000,
+          "text": "I will give you 5 food by simulation time 34200000."
+        },
+        {
+          "id": "p2",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25201000,
+          "text": "Agreed. Thank you."
+        }
+      ],
+      "probe": {
+        "citizenId": "resident-1",
+        "asOfSimTimeMs": 25300000,
+        "question": "What have I agreed to deliver?"
+      },
+      "expected": {
+        "status": "accepted",
+        "promisorId": "resident-1",
+        "recipientId": "resident-2",
+        "resource": "food",
+        "amount": 5,
+        "deadlineMs": 34200000
+      },
+      "requiredSourceIds": ["p1", "p2"]
+    },
+    {
+      "id": "tentative-offer",
+      "evidence": [
+        {
+          "id": "o1",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25200000,
+          "text": "I might be able to bring 5 food, but I cannot promise yet."
+        }
+      ],
+      "probe": {
+        "citizenId": "resident-1",
+        "asOfSimTimeMs": 25300000,
+        "question": "Do I have an accepted delivery commitment?"
+      },
+      "expected": {
+        "status": "tentative",
+        "acceptedCommitments": []
+      },
+      "requiredSourceIds": ["o1"]
+    },
+    {
+      "id": "accepted-amendment",
+      "evidence": [
+        {
+          "id": "a1",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25200000,
+          "text": "I will give you 5 food by simulation time 34200000."
+        },
+        {
+          "id": "a2",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25201000,
+          "text": "Agreed."
+        },
+        {
+          "id": "a3",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25202000,
+          "text": "Can we move the deadline to 37800000?"
+        },
+        {
+          "id": "a4",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25203000,
+          "text": "Yes, the later deadline is agreed."
+        }
+      ],
+      "probe": {
+        "citizenId": "resident-1",
+        "asOfSimTimeMs": 25300000,
+        "question": "What is the currently agreed deadline?"
+      },
+      "expected": {
+        "status": "accepted",
+        "deadlineMs": 37800000,
+        "supersededDeadlineMs": 34200000
+      },
+      "requiredSourceIds": ["a1", "a2", "a3", "a4"]
+    },
+    {
+      "id": "accepted-cancellation",
+      "evidence": [
+        {
+          "id": "c1",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25200000,
+          "text": "I will bring 5 food."
+        },
+        {
+          "id": "c2",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25201000,
+          "text": "Agreed."
+        },
+        {
+          "id": "c3",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25202000,
+          "text": "Can we cancel that delivery?"
+        },
+        {
+          "id": "c4",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-1", "resident-2"],
+          "simTimeMs": 25203000,
+          "text": "Yes, we both cancel it."
+        }
+      ],
+      "probe": {
+        "citizenId": "resident-1",
+        "asOfSimTimeMs": 25300000,
+        "question": "Is that delivery still due?"
+      },
+      "expected": {
+        "status": "cancelled",
+        "activeCommitments": []
+      },
+      "requiredSourceIds": ["c1", "c2", "c3", "c4"]
+    },
+    {
+      "id": "stale-stock",
+      "evidence": [
+        {
+          "id": "s1",
+          "speakerId": "resident-1",
+          "recipientIds": ["resident-1"],
+          "simTimeMs": 25200000,
+          "text": "I inspected resident-5: it held 8 food."
+        },
+        {
+          "id": "s2",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-2"],
+          "simTimeMs": 25202000,
+          "text": "I removed 6 food from resident-5."
+        }
+      ],
+      "probe": {
+        "citizenId": "resident-1",
+        "asOfSimTimeMs": 25300000,
+        "question": "How much food is there now?"
+      },
+      "expected": {
+        "currentStock": "unknown",
+        "lastObservedStock": 8,
+        "lastObservedAtMs": 25200000,
+        "forbiddenSourceIds": ["s2"]
+      },
+      "requiredSourceIds": ["s1"]
+    },
+    {
+      "id": "private-and-unavailable",
+      "evidence": [
+        {
+          "id": "v1",
+          "speakerId": "resident-2",
+          "recipientIds": ["resident-2", "resident-3"],
+          "simTimeMs": 25200000,
+          "text": "I privately intend to visit the garden tomorrow."
+        }
+      ],
+      "probe": {
+        "citizenId": "resident-1",
+        "asOfSimTimeMs": 25300000,
+        "question": "What private plan did the others discuss?"
+      },
+      "expected": {
+        "answer": "unknown",
+        "forbiddenSourceIds": ["v1"]
+      },
+      "requiredSourceIds": []
+    }
+  ]
+}

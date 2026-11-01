@@ -16,6 +16,8 @@ import {
   type Scenario,
   type WorldState,
   type RunManifest,
+  type RunProvenance,
+  runtimePolicy,
 } from "@repo/contracts";
 import { applyCommand, createWorld, replay } from "@repo/engine";
 import { saveCheckpoint } from "./checkpoints";
@@ -37,7 +39,15 @@ export type StoredWorld = {
 export class WorldStore {
   constructor(readonly db: Database) {}
 
-  async create(input: Scenario, commit = "unknown"): Promise<StoredWorld> {
+  async create(
+    input: Scenario,
+    commit = "unknown",
+    provenance: RunProvenance = {
+      sourceDirty: null,
+      dependencyLockHash: null,
+      protocol: null,
+    },
+  ): Promise<StoredWorld> {
     const scenario = parseScenario(input);
     const state = createWorld(scenario, crypto.randomUUID());
     const stateHash = await contentHash(state);
@@ -60,6 +70,11 @@ export class WorldStore {
       contextTokenLimit: 0,
       spendingLimitUsd: 0,
       createdAt: new Date().toISOString(),
+      configuration: runtimePolicy,
+      scenarioVersion: scenario.version,
+      mapHash: await contentHash(scenario.map),
+      profilesHash: await contentHash(scenario.citizens),
+      provenance,
     };
     await this.db.transaction(async (tx) => {
       await tx.insert(runs).values({
@@ -83,7 +98,7 @@ export class WorldStore {
       .set({
         ownerId,
         ownerGeneration: sql`${runs.ownerGeneration} + 1`,
-        leaseUntil: sql`clock_timestamp() + interval '15 seconds'`,
+        leaseUntil: sql`clock_timestamp() + ${runtimePolicy.ownershipLeaseMs} * interval '1 millisecond'`,
       })
       .where(
         and(
@@ -168,7 +183,7 @@ export class WorldStore {
           sequence: result.state.sequence,
           simTimeMs: result.state.simTimeMs,
           status: result.state.status,
-          leaseUntil: sql`clock_timestamp() + interval '15 seconds'`,
+          leaseUntil: sql`clock_timestamp() + ${runtimePolicy.ownershipLeaseMs} * interval '1 millisecond'`,
         })
         .where(
           and(
@@ -269,6 +284,23 @@ export class WorldStore {
       })
       .from(runs)
       .orderBy(desc(runs.createdAt))
+      .limit(100);
+  }
+
+  async recoverableRuns() {
+    return this.db
+      .select({ id: runs.id })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.status, "running"),
+          or(
+            isNull(runs.leaseUntil),
+            lte(runs.leaseUntil, sql`clock_timestamp()`),
+          ),
+        ),
+      )
+      .orderBy(asc(runs.createdAt))
       .limit(100);
   }
 

@@ -52,6 +52,7 @@ live(
         }),
       ).rejects.toThrow("ownership");
       const recovered = await new WorldStore(db).load(runId);
+      expect(recovered.manifest).toEqual(created.manifest);
       expect(await contentHash(recovered.state)).toBe(
         await contentHash(first.state),
       );

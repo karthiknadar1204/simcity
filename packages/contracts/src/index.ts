@@ -1,4 +1,5 @@
 export * from "./types";
+export { runtimePolicy } from "./runtime";
 import type { Scenario, Command } from "./types";
 import { z } from "zod";
 

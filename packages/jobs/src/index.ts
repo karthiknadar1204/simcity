@@ -9,10 +9,10 @@ import {
   runs,
 } from "@repo/db/tables";
 import { createArchiveStore } from "@repo/storage";
-import { contentHash } from "@repo/contracts";
+import { contentHash, runtimePolicy } from "@repo/contracts";
 
 export const queueNames = {
-  archive: "simcity-archive",
+  archive: runtimePolicy.archiveQueue,
   cognition: "simcity-cognition",
   extraction: "simcity-extraction",
   embeddings: "simcity-embeddings",
@@ -49,8 +49,8 @@ export function createArchiveQueue(
   return new Queue(name, {
     connection: { ...connection(redisUrl), maxRetriesPerRequest: 1 },
     defaultJobOptions: {
-      attempts: 5,
-      backoff: { type: "exponential", delay: 1000 },
+      attempts: runtimePolicy.archiveAttempts,
+      backoff: { type: "exponential", delay: runtimePolicy.archiveBackoffMs },
       removeOnComplete: { age: 86400, count: 1000 },
       removeOnFail: false,
     },
@@ -126,7 +126,10 @@ export function createArchiveWorker(
         .where(eq(backgroundTasks.id, job.data.taskId))
         .limit(1);
       if (!task || task.status === "completed") return;
-      if (task.attempts >= 5 || task.status === "failed")
+      if (
+        task.attempts >= runtimePolicy.archiveAttempts ||
+        task.status === "failed"
+      )
         throw new Error("Durable retry budget exhausted.");
       await db
         .update(backgroundTasks)
@@ -175,7 +178,10 @@ export function createArchiveWorker(
         await db
           .update(backgroundTasks)
           .set({
-            status: task.attempts + 1 >= 5 ? "failed" : "queued",
+            status:
+              task.attempts + 1 >= runtimePolicy.archiveAttempts
+                ? "failed"
+                : "queued",
             error: error instanceof Error ? error.name : "ArchiveError",
           })
           .where(
@@ -193,7 +199,7 @@ export function createArchiveWorker(
     },
     {
       connection: { ...connection(redisUrl), maxRetriesPerRequest: null },
-      concurrency: 2,
+      concurrency: runtimePolicy.archiveConcurrency,
     },
   );
   worker.on("error", () => console.error("Archive worker connection error."));

@@ -7,6 +7,7 @@ import { citizenView } from "@repo/engine";
 import { StoreError, type WorldStore } from "@repo/storage";
 import type { Coordinator } from "../world/coordinator";
 import { loadScenarios } from "../services/scenarios";
+import { runProvenance } from "../services/run-provenance";
 
 function integer(
   value: string | undefined,
@@ -92,10 +93,11 @@ export function worldRoutes(
       (s) => s.id === body.scenarioId,
     );
     if (!scenario) throw new StoreError("Scenario not found.", 404);
-    const revision =
-      Bun.spawnSync(["git", "rev-parse", "HEAD"]).stdout.toString().trim() ||
-      "unknown";
-    return c.json(await service().store.create(scenario, revision), 201);
+    const { revision, provenance } = await runProvenance();
+    return c.json(
+      await service().store.create(scenario, revision, provenance),
+      201,
+    );
   });
   app.get("/runs/:id", async (c) =>
     c.json(await service().store.current(c.req.param("id"))),

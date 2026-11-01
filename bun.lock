@@ -52,6 +52,7 @@
     "apps/worker": {
       "name": "worker",
       "dependencies": {
+        "@repo/contracts": "workspace:*",
         "@repo/db": "workspace:*",
         "@repo/jobs": "workspace:*",
       },

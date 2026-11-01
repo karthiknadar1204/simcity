@@ -1,4 +1,5 @@
 import type { Command, WorldState } from "@repo/contracts";
+import { runtimePolicy } from "@repo/contracts";
 import type { WorldStore } from "@repo/storage";
 
 export class Coordinator {
@@ -42,13 +43,13 @@ export class Coordinator {
     await this.restore();
     this.timer = setInterval(() => {
       void this.tick();
-    }, 500);
+    }, runtimePolicy.tickIntervalMs);
   }
 
   private async restore() {
     this.lastRestore = Date.now();
-    for (const run of await this.store.list()) {
-      if (run.status !== "running" || this.owned.has(run.id)) continue;
+    for (const run of await this.store.recoverableRuns()) {
+      if (this.owned.has(run.id)) continue;
       try {
         const generation = await this.store.claim(run.id, this.ownerId);
         const restored = await this.store.load(run.id);
@@ -65,7 +66,8 @@ export class Coordinator {
     if (this.ticking || this.stopping) return;
     this.ticking = true;
     try {
-      if (Date.now() - this.lastRestore >= 5000) await this.restore();
+      if (Date.now() - this.lastRestore >= runtimePolicy.discoveryIntervalMs)
+        await this.restore();
       for (const [id, entry] of this.owned) {
         if (entry.state.status !== "running") continue;
         try {
@@ -73,7 +75,9 @@ export class Coordinator {
             id: crypto.randomUUID(),
             action: {
               kind: "advance",
-              durationMs: Math.round(500 * entry.state.speed),
+              durationMs: Math.round(
+                runtimePolicy.tickIntervalMs * entry.state.speed,
+              ),
             },
           });
         } catch {

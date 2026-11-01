@@ -15,6 +15,13 @@
       "when": 1793519257035,
       "tag": "0001_square_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793522648079,
+      "tag": "0002_abnormal_turbo",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,6 @@
 export * from "./types";
+export * from "./agents";
+import { planProposalSchema } from "./agents";
 export { runtimePolicy } from "./runtime";
 import type { Scenario, Command } from "./types";
 import { z } from "zod";
@@ -138,6 +140,12 @@ export function parseScenario(input: unknown): Scenario {
 }
 
 const actionSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("plan"),
+    actorId: id,
+    expectedVersion: integer,
+    plan: planProposalSchema,
+  }),
   z.strictObject({ kind: z.literal("move"), actorId: id, destination: point }),
   z.strictObject({
     kind: z.literal("interact"),

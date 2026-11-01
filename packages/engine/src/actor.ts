@@ -24,6 +24,29 @@ export function act(
     return;
   }
   requireRule(currentJob?.kind !== "sleep", "Citizen is sleeping.");
+  if (action.kind === "plan") {
+    requireRule(
+      action.expectedVersion === (actor.plan?.version ?? 0),
+      "Plan version changed.",
+    );
+    requireRule(
+      action.plan.cursor < action.plan.steps.length,
+      "Plan cursor is outside its steps.",
+    );
+    const plan = {
+      ...action.plan,
+      version: action.expectedVersion + 1,
+      updatedAtMs: ctx.state.simTimeMs,
+      nextReviewAtMs: ctx.state.simTimeMs + action.plan.reviewAfterMs,
+    };
+    ctx.emit(
+      "plan.updated",
+      `Personal plan revised: ${plan.currentActivity}`,
+      { citizens: { [actor.id]: { ...actor, plan } } },
+      { actorId: actor.id, position: actor.position, audienceIds: [actor.id] },
+    );
+    return;
+  }
   if (action.kind === "say") {
     const audienceIds = action.audienceIds
       ? [...new Set([actor.id, ...action.audienceIds])]

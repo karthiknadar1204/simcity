@@ -15,7 +15,8 @@
     "hono": "4.13.16",
     "@repo/contracts": "workspace:*",
     "@repo/storage": "workspace:*",
-    "@repo/engine": "workspace:*"
+    "@repo/engine": "workspace:*",
+    "@repo/agent-runtime": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

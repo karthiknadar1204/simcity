@@ -59,7 +59,10 @@
         "R2_BUCKET_NAME",
         "R2_ACCESS_KEY_ID",
         "R2_SECRET_ACCESS_KEY",
-        "OPERATOR_TOKEN"
+        "OPERATOR_TOKEN",
+        "OPENAI_API_KEY",
+        "openai_api_key",
+        "OPENAI_MODEL"
       ]
     }
   }

@@ -37,6 +37,7 @@ export interface Citizen {
   initialMemories: string[];
   actionId: string | null;
   facing: Facing;
+  plan?: import("./agents").CitizenPlan;
 }
 
 export interface WorldObject {
@@ -84,6 +85,12 @@ export interface Scenario {
 }
 
 export type Action =
+  | {
+      kind: "plan";
+      actorId: string;
+      expectedVersion: number;
+      plan: import("./agents").PlanProposal;
+    }
   | { kind: "move"; actorId: string; destination: Point }
   | {
       kind: "interact";
@@ -212,7 +219,9 @@ export interface RunManifest {
   engineCommit: string;
   seed: number;
   clockPolicy: "freeze-during-downtime";
-  actorMode: "operator-fixture";
+  actorMode: "operator-fixture" | "autonomous";
+  agent?: import("./agents").AgentConfiguration;
+  agentRuntime?: typeof import("./agents").agentPolicy;
   modelRoles: Record<string, string>;
   promptVersion: string | null;
   toolVersion: string;

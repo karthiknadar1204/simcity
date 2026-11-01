@@ -1,4 +1,4 @@
-import type { Command, WorldState } from "@repo/contracts";
+import type { Command, WorldState, AgentGuard } from "@repo/contracts";
 import { runtimePolicy } from "@repo/contracts";
 import type { WorldStore } from "@repo/storage";
 
@@ -25,7 +25,7 @@ export class Coordinator {
     return next;
   }
 
-  async execute(id: string, command: Command) {
+  async execute(id: string, command: Command, guard?: AgentGuard) {
     return this.serialize(id, async () => {
       const generation = await this.store.claim(id, this.ownerId);
       const result = await this.store.execute(
@@ -33,6 +33,7 @@ export class Coordinator {
         this.ownerId,
         generation,
         command,
+        guard,
       );
       this.owned.set(id, { generation, state: result.state });
       return result;

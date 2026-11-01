@@ -6,6 +6,7 @@ import {
   events,
   observations,
   runs,
+  agentBudgets,
 } from "@repo/db/tables";
 import {
   contentHash,
@@ -18,9 +19,17 @@ import {
   type RunManifest,
   type RunProvenance,
   runtimePolicy,
+  agentPolicy,
+  type AgentConfiguration,
+  type AgentGuard,
 } from "@repo/contracts";
 import { applyCommand, createWorld, replay } from "@repo/engine";
 import { saveCheckpoint } from "./checkpoints";
+import {
+  initializeThinking,
+  assertThinkingGuard,
+  recordThinkingTriggers,
+} from "./thinking-records";
 
 export class StoreError extends Error {
   constructor(
@@ -47,28 +56,35 @@ export class WorldStore {
       dependencyLockHash: null,
       protocol: null,
     },
+    agent?: AgentConfiguration,
   ): Promise<StoredWorld> {
     const scenario = parseScenario(input);
+    if (
+      agent &&
+      !scenario.citizens.some((citizen) => citizen.id === agent.citizenId)
+    )
+      throw new StoreError("Agent citizen is not in the scenario.", 400);
     const state = createWorld(scenario, crypto.randomUUID());
     const stateHash = await contentHash(state);
     const manifest: RunManifest = {
       version: 1,
       runId: state.runId,
       parentRunId: null,
-      engineVersion: "phase1-v1",
-      schemaVersion: "phase1-v1",
+      engineVersion: "phase2-v1",
+      schemaVersion: "drizzle-0002",
       scenarioId: scenario.id,
       scenarioHash: await contentHash(scenario),
       engineCommit: commit,
       seed: scenario.seed,
       clockPolicy: "freeze-during-downtime",
-      actorMode: "operator-fixture",
-      modelRoles: {},
-      promptVersion: null,
-      toolVersion: "commands-v1",
+      actorMode: agent ? "autonomous" : "operator-fixture",
+      ...(agent ? { agent, agentRuntime: agentPolicy } : {}),
+      modelRoles: agent ? { actor: agent.model } : {},
+      promptVersion: agent ? agentPolicy.promptVersion : null,
+      toolVersion: agent ? agentPolicy.toolVersion : "commands-v1",
       memoryVariant: "observations-only",
-      contextTokenLimit: 0,
-      spendingLimitUsd: 0,
+      contextTokenLimit: agent ? agentPolicy.contextTokens : 0,
+      spendingLimitUsd: agent ? agent.spendingLimitMicroUsd / 1000000 : 0,
       createdAt: new Date().toISOString(),
       configuration: runtimePolicy,
       scenarioVersion: scenario.version,
@@ -88,6 +104,16 @@ export class WorldStore {
         status: state.status,
       });
       await saveCheckpoint(tx, state, stateHash);
+      if (agent) {
+        await tx
+          .insert(agentBudgets)
+          .values({
+            runId: state.runId,
+            limitMicroUsd: agent.spendingLimitMicroUsd,
+            maxRequests: agent.maxRequests,
+          });
+        await initializeThinking(tx, state, agent);
+      }
     });
     return { state, stateHash, manifest };
   }
@@ -120,6 +146,7 @@ export class WorldStore {
     ownerId: string,
     generation: number,
     input: Command,
+    guard?: AgentGuard,
   ) {
     const command = parseCommand(input);
     return this.db.transaction(async (tx) => {
@@ -135,6 +162,17 @@ export class WorldStore {
       if (!row) throw new StoreError("World not found.", 404);
       if (!row.valid)
         throw new StoreError("World ownership changed or expired.");
+      if (guard) {
+        await assertThinkingGuard(tx, row.state, guard);
+        if (
+          !("actorId" in command.action) ||
+          command.action.actorId !== guard.citizenId
+        )
+          throw new StoreError(
+            "Citizen tools cannot use operator controls or another actor.",
+            403,
+          );
+      }
       const [previous] = await tx
         .select()
         .from(commands)
@@ -175,6 +213,7 @@ export class WorldStore {
         request: command,
         receipt: result.receipt,
       });
+      await recordThinkingTriggers(tx, row.state, result, command, guard);
       await tx
         .update(runs)
         .set({

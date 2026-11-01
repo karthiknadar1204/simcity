@@ -3,9 +3,19 @@ import { bearerAuth } from "hono/bearer-auth";
 import { HTTPException } from "hono/http-exception";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { contentHash, parseCommand } from "@repo/contracts";
+import {
+  contentHash,
+  parseCommand,
+  agentPolicy,
+  type AgentConfiguration,
+} from "@repo/contracts";
 import { citizenView } from "@repo/engine";
-import { StoreError, type WorldStore } from "@repo/storage";
+import {
+  StoreError,
+  ThinkingError,
+  type WorldStore,
+  type AgentStore,
+} from "@repo/storage";
 import type { Coordinator } from "../world/coordinator";
 import { loadScenarios } from "../services/scenarios";
 import { runProvenance } from "../services/run-provenance";
@@ -25,6 +35,7 @@ function integer(
 export function worldRoutes(
   store: WorldStore | null,
   coordinator: Coordinator | null,
+  cognition?: { agents: AgentStore; ready: boolean; defaultModel: string },
 ) {
   const app = new Hono();
   const service = () => {
@@ -53,6 +64,8 @@ export function worldRoutes(
     await next();
   });
   app.onError((error, c) => {
+    if (error instanceof ThinkingError)
+      return c.json({ error: error.message }, 409);
     if (error instanceof HTTPException) return error.getResponse();
     if (error instanceof StoreError)
       return c.json(
@@ -76,6 +89,10 @@ export function worldRoutes(
         id: s.id,
         name: s.name,
         citizens: s.citizens.length,
+        residents: s.citizens.map((citizen) => ({
+          id: citizen.id,
+          name: citizen.name,
+        })),
         width: s.map.width,
         height: s.map.height,
       })),
@@ -83,23 +100,70 @@ export function worldRoutes(
   );
   app.get("/runs", async (c) => c.json({ runs: await service().store.list() }));
   app.post("/runs", async (c) => {
-    const body = await c.req.json<{ scenarioId?: string }>();
+    const body = await c.req.json<{
+      scenarioId?: string;
+      autonomous?: boolean;
+      citizenId?: string;
+    }>();
     if (
       !body ||
       typeof body !== "object" ||
       typeof body.scenarioId !== "string" ||
-      Object.keys(body).some((key) => key !== "scenarioId")
+      Object.keys(body).some(
+        (key) => !["scenarioId", "autonomous", "citizenId"].includes(key),
+      ) ||
+      (body.autonomous !== undefined && typeof body.autonomous !== "boolean") ||
+      (body.citizenId !== undefined && typeof body.citizenId !== "string")
     )
-      throw new StoreError("Supply only a scenarioId.", 400);
+      throw new StoreError(
+        "Supply a scenarioId and optional autonomous/citizenId fields.",
+        400,
+      );
     const scenario = (await loadScenarios()).find(
       (s) => s.id === body.scenarioId,
     );
     if (!scenario) throw new StoreError("Scenario not found.", 404);
+    let agent: AgentConfiguration | undefined;
+    if (body.autonomous) {
+      if (!cognition?.ready)
+        throw new StoreError(
+          "Configure server-only OPENAI_API_KEY and REDIS_URL first.",
+          503,
+        );
+      if (![agentPolicy.model, "gpt-5.4-mini"].includes(cognition.defaultModel))
+        throw new StoreError(
+          "Actor model has no verified pricing profile.",
+          400,
+        );
+      agent = {
+        provider: "openai",
+        citizenId: body.citizenId || scenario.citizens[0]!.id,
+        model: cognition.defaultModel,
+        spendingLimitMicroUsd: agentPolicy.spendingLimitMicroUsd,
+        maxRequests: agentPolicy.maxRequests,
+      };
+    }
     const { revision, provenance } = await runProvenance();
     return c.json(
-      await service().store.create(scenario, revision, provenance),
+      await service().store.create(scenario, revision, provenance, agent),
       201,
     );
+  });
+  app.get("/runs/:id/citizens/:citizenId/thinking", async (c) => {
+    if (!cognition) return c.json({ thinking: null });
+    await service().store.current(c.req.param("id"));
+    return c.json({
+      thinking: await cognition.agents.status(
+        c.req.param("id"),
+        c.req.param("citizenId"),
+      ),
+    });
+  });
+  app.post("/runs/:id/citizens/:citizenId/retry", async (c) => {
+    if (!cognition?.ready)
+      throw new StoreError("Autonomous runtime is not configured.", 503);
+    await cognition.agents.retry(c.req.param("id"), c.req.param("citizenId"));
+    return c.json({ status: "scheduled" });
   });
   app.get("/runs/:id", async (c) =>
     c.json(await service().store.current(c.req.param("id"))),

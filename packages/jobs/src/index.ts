@@ -9,7 +9,7 @@ import {
   runs,
 } from "@repo/db/tables";
 import { createArchiveStore } from "@repo/storage";
-import { contentHash, runtimePolicy } from "@repo/contracts";
+import { contentHash, runtimePolicy, agentPolicy } from "@repo/contracts";
 
 export const queueNames = {
   archive: runtimePolicy.archiveQueue,
@@ -57,6 +57,31 @@ export function createArchiveQueue(
   });
 }
 
+export function createThinkingQueue(redisUrl: string) {
+  return createArchiveQueue(redisUrl, queueNames.cognition);
+}
+export function createThinkingWorker(
+  redisUrl: string,
+  processTask: (taskId: string) => Promise<void>,
+) {
+  const worker = new Worker<{ taskId: string }>(
+    queueNames.cognition,
+    (job) => processTask(job.data.taskId),
+    {
+      connection: { ...connection(redisUrl), maxRetriesPerRequest: null },
+      concurrency: agentPolicy.concurrency,
+      lockDuration: agentPolicy.leaseMs,
+      stalledInterval: 5000,
+      maxStalledCount: 2,
+    },
+  );
+  worker.on("error", () => console.error("Thinking queue connection error."));
+  worker.on("failed", (job) =>
+    console.error(`Thinking delivery ${job?.id ?? "unknown"} failed.`),
+  );
+  return worker;
+}
+
 export async function dispatchOutbox(
   db: Database,
   queue: ReturnType<typeof createArchiveQueue>,
@@ -67,6 +92,7 @@ export async function dispatchOutbox(
     .from(backgroundTasks)
     .where(
       and(
+        eq(backgroundTasks.kind, "archive.checkpoint"),
         inArray(backgroundTasks.status, ["pending", "queued"]),
         taskIds ? inArray(backgroundTasks.id, taskIds) : undefined,
       ),
@@ -126,6 +152,9 @@ export function createArchiveWorker(
         .where(eq(backgroundTasks.id, job.data.taskId))
         .limit(1);
       if (!task || task.status === "completed") return;
+      if (task.kind !== "archive.checkpoint" || !("sequence" in task.payload))
+        throw new Error("Wrong task routed to archive queue.");
+      const payload = task.payload;
       if (
         task.attempts >= runtimePolicy.archiveAttempts ||
         task.status === "failed"
@@ -146,15 +175,15 @@ export function createArchiveWorker(
           .innerJoin(runs, eq(runs.id, checkpoints.runId))
           .where(
             and(
-              eq(checkpoints.runId, task.payload.runId),
-              eq(checkpoints.sequence, task.payload.sequence),
+              eq(checkpoints.runId, payload.runId),
+              eq(checkpoints.sequence, payload.sequence),
             ),
           )
           .limit(1);
         if (!source) throw new Error("Checkpoint source missing.");
         if ((await contentHash(source.state)) !== source.stateHash)
           throw new Error("Checkpoint source hash mismatch.");
-        const key = `runs/${task.runId}/checkpoints/${task.payload.sequence}-${source.stateHash}.json`;
+        const key = `runs/${task.runId}/checkpoints/${payload.sequence}-${source.stateHash}.json`;
         const result = await archive.put(
           key,
           JSON.stringify({ version: 1, ...source }),
@@ -165,7 +194,7 @@ export function createArchiveWorker(
             .values({
               id: task.id,
               runId: task.runId,
-              sequence: task.payload.sequence,
+              sequence: payload.sequence,
               ...result,
             })
             .onConflictDoNothing();

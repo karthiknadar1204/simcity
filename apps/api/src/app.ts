@@ -1,4 +1,10 @@
-import { WorldStore } from "@repo/storage";
+import { WorldStore, AgentStore } from "@repo/storage";
+import {
+  AgentRunner,
+  AgentRuntime,
+  createOpenAIModel,
+} from "@repo/agent-runtime";
+import { agentPolicy } from "@repo/contracts";
 import { Coordinator } from "./world/coordinator";
 import { worldRoutes } from "./routes/worlds";
 import { bodyLimit } from "hono/body-limit";
@@ -11,18 +17,43 @@ export function createApp(databaseUrl?: string) {
   const app = new Hono();
   const store = database ? new WorldStore(database.db) : null;
   const coordinator = store ? new Coordinator(store) : null;
+  const agents = database ? new AgentStore(database.db) : null;
+  const apiKey = process.env.OPENAI_API_KEY || process.env.openai_api_key;
+  const ready = Boolean(
+    apiKey && process.env.REDIS_URL && store && coordinator && agents,
+  );
+  const defaultModel = process.env.OPENAI_MODEL || agentPolicy.model;
+  const runtime =
+    ready && store && coordinator && agents
+      ? new AgentRuntime(
+          agents,
+          new AgentRunner(store, agents, coordinator, (model) =>
+            createOpenAIModel(apiKey!, model),
+          ),
+          process.env.REDIS_URL!,
+        )
+      : null;
   app.use("/api/*", bodyLimit({ maxSize: 1024 * 1024 }));
 
   app.use(
     "/api/*",
     cors({ origin: process.env.WEB_ORIGIN || "http://localhost:5173" }),
   );
-  app.route("/api/world", worldRoutes(store, coordinator));
+  app.route(
+    "/api/world",
+    worldRoutes(
+      store,
+      coordinator,
+      agents ? { agents, ready, defaultModel } : undefined,
+    ),
+  );
   app.get("/api/health", (c) =>
     c.json({
       status: "ok",
       service: "simcity-api",
       databaseConfigured: Boolean(database),
+      autonomousConfigured: ready,
+      actorModel: ready ? defaultModel : null,
     }),
   );
   app.get("/api/health/db", async (c) => {
@@ -49,8 +80,10 @@ export function createApp(databaseUrl?: string) {
     app,
     start: async () => {
       await coordinator?.start();
+      await runtime?.start();
     },
     close: async () => {
+      await runtime?.close();
       await coordinator?.stop();
       await database?.pool.end();
     },

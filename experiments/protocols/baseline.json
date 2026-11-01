@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "id": "town-memory-baseline-v1",
+  "developmentScenario": "small-town-v1",
+  "heldOutScenario": "unfamiliar-town-v1",
+  "phase1ActorMode": "operator-fixture",
+  "clockPolicy": "freeze-during-downtime",
+  "hypotheses": [
+    {
+      "id": "retrievable-history",
+      "comparison": "recent-window versus persistent episodes",
+      "primaryMetric": "accessible supporting-source recall within a fixed token budget",
+      "minimumUsefulDifference": 0.05
+    },
+    {
+      "id": "commitment-ledger",
+      "comparison": "ledger enabled versus disabled",
+      "primaryMetric": "accepted eligible commitments fulfilled by deadline",
+      "minimumUsefulDifference": 0.05
+    },
+    {
+      "id": "reflection",
+      "comparison": "episodes versus episodes plus direct reflections",
+      "primaryMetric": "next-day scenario outcome rate",
+      "minimumUsefulDifference": 0.05
+    },
+    {
+      "id": "predictive-distillation",
+      "comparison": "direct versus prediction-error consolidation",
+      "primaryMetric": "supporting-source recall at matched total cost",
+      "minimumUsefulDifference": 0.03
+    }
+  ],
+  "hardGates": {
+    "duplicateEffects": 0,
+    "forbiddenSourceReturns": 0,
+    "invalidResourceTransitions": 0,
+    "replayHashMismatch": 0
+  },
+  "futureMemoryTargets": {
+    "unambiguousFieldAccuracy": 0.95,
+    "supportingSourceRecall": 0.9,
+    "dueCommitmentInclusion": 1
+  },
+  "controls": [
+    "same initial scenario and exogenous seed",
+    "same actor and context budget",
+    "isolated run namespaces",
+    "held-out questions excluded from ingestion and prompts",
+    "include aborted runs and all processor costs"
+  ],
+  "stopConditions": {
+    "spendingLimitUsd": 0,
+    "paidInferenceAllowedInPhase1": false,
+    "maxActorToolRounds": 6
+  },
+  "status": "predeclared development targets; no measured results"
+}

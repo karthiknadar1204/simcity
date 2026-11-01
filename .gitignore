@@ -14,6 +14,8 @@ node_modules
 .env*
 !.env.example
 *.tsbuildinfo
+.local/
+reports/runs/
 
 # Testing
 coverage

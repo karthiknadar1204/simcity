@@ -1,0 +1,365 @@
+{
+  "version": 1,
+  "id": "unfamiliar-town-v1",
+  "name": "Unfamiliar town",
+  "seed": 73,
+  "startTimeMs": 25200000,
+  "speed": 1,
+  "map": {
+    "width": 24,
+    "height": 16,
+    "tileSize": 32,
+    "blocked": [
+      {
+        "x": 12,
+        "y": 1
+      },
+      {
+        "x": 12,
+        "y": 2
+      },
+      {
+        "x": 12,
+        "y": 3
+      },
+      {
+        "x": 12,
+        "y": 4
+      },
+      {
+        "x": 12,
+        "y": 6
+      },
+      {
+        "x": 12,
+        "y": 7
+      },
+      {
+        "x": 12,
+        "y": 8
+      },
+      {
+        "x": 12,
+        "y": 9
+      },
+      {
+        "x": 12,
+        "y": 10
+      },
+      {
+        "x": 12,
+        "y": 11
+      },
+      {
+        "x": 12,
+        "y": 13
+      }
+    ]
+  },
+  "rules": {
+    "dayLengthMs": 86400000,
+    "checkpointIntervalMs": 300000,
+    "checkpointEventInterval": 1000,
+    "maxAdvanceMs": 600000,
+    "maxEventsPerTransition": 10000,
+    "hungerPerSecond": 1,
+    "energyPerSecond": 1,
+    "sleepRecoveryPerSecond": 40
+  },
+  "citizens": [
+    {
+      "id": "resident-1",
+      "name": "Resident 1",
+      "biography": "A practical resident who enjoys growing food and meeting neighbors.",
+      "motivations": [
+        "Stay healthy",
+        "Explore useful places",
+        "Help with shared projects"
+      ],
+      "position": {
+        "x": 3,
+        "y": 4
+      },
+      "inventory": {
+        "food": 2
+      },
+      "capacity": 24,
+      "needs": {
+        "hunger": 150,
+        "energy": 850
+      },
+      "visionRadius": 5,
+      "hearingRadius": 4,
+      "moveDurationMs": 400,
+      "knownEntityIds": [
+        "resident-1",
+        "resident-2",
+        "resident-3",
+        "resident-4",
+        "resident-5",
+        "resident-6",
+        "resident-7",
+        "resident-8",
+        "resident-9",
+        "resident-10"
+      ],
+      "initialMemories": ["I arrived in this town and learned the public map."],
+      "actionId": null,
+      "facing": "down"
+    },
+    {
+      "id": "resident-2",
+      "name": "Resident 2",
+      "biography": "A cook who values reliable arrangements and experiments with meals.",
+      "motivations": ["Prepare meals", "Keep commitments", "Talk to neighbors"],
+      "position": {
+        "x": 11,
+        "y": 8
+      },
+      "inventory": {
+        "food": 2
+      },
+      "capacity": 24,
+      "needs": {
+        "hunger": 150,
+        "energy": 850
+      },
+      "visionRadius": 5,
+      "hearingRadius": 4,
+      "moveDurationMs": 400,
+      "knownEntityIds": [
+        "resident-1",
+        "resident-2",
+        "resident-3",
+        "resident-4",
+        "resident-5",
+        "resident-6",
+        "resident-7",
+        "resident-8",
+        "resident-9",
+        "resident-10"
+      ],
+      "initialMemories": ["I arrived in this town and learned the public map."],
+      "actionId": null,
+      "facing": "down"
+    },
+    {
+      "id": "resident-3",
+      "name": "Resident 3",
+      "biography": "A craftsperson who likes repairing things and quiet walks.",
+      "motivations": [
+        "Maintain the town",
+        "Learn useful routines",
+        "Rest when tired"
+      ],
+      "position": {
+        "x": 18,
+        "y": 4
+      },
+      "inventory": {
+        "food": 2
+      },
+      "capacity": 24,
+      "needs": {
+        "hunger": 150,
+        "energy": 850
+      },
+      "visionRadius": 5,
+      "hearingRadius": 4,
+      "moveDurationMs": 400,
+      "knownEntityIds": [
+        "resident-1",
+        "resident-2",
+        "resident-3",
+        "resident-4",
+        "resident-5",
+        "resident-6",
+        "resident-7",
+        "resident-8",
+        "resident-9",
+        "resident-10"
+      ],
+      "initialMemories": ["I arrived in this town and learned the public map."],
+      "actionId": null,
+      "facing": "down"
+    }
+  ],
+  "objects": [
+    {
+      "id": "resident-4",
+      "name": "Place 4",
+      "position": {
+        "x": 4,
+        "y": 11
+      },
+      "tags": ["garden"],
+      "ownerId": null,
+      "inventory": {
+        "food": 30
+      },
+      "capabilities": [
+        {
+          "id": "harvest",
+          "label": "Harvest food",
+          "durationMs": 1200,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {
+            "food": 1
+          },
+          "objectOutputs": {},
+          "needs": {
+            "hunger": 0,
+            "energy": -2
+          },
+          "progressDelta": 0
+        }
+      ],
+      "progress": 0,
+      "regeneration": {
+        "resource": "food",
+        "intervalMs": 60000,
+        "amount": 2,
+        "maximum": 40,
+        "probability": 0.7,
+        "nextAt": 25260000
+      }
+    },
+    {
+      "id": "resident-5",
+      "name": "Place 5",
+      "position": {
+        "x": 9,
+        "y": 4
+      },
+      "tags": ["storehouse"],
+      "ownerId": null,
+      "inventory": {
+        "food": 16
+      },
+      "capabilities": [
+        {
+          "id": "take-food",
+          "label": "Collect food",
+          "durationMs": 600,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {
+            "food": 1
+          },
+          "objectOutputs": {},
+          "needs": {
+            "hunger": 0,
+            "energy": 0
+          },
+          "progressDelta": 0
+        },
+        {
+          "id": "eat",
+          "label": "Eat a portion",
+          "durationMs": 1000,
+          "actorInputs": {},
+          "objectInputs": {
+            "food": 1
+          },
+          "actorOutputs": {},
+          "objectOutputs": {},
+          "needs": {
+            "hunger": -120,
+            "energy": 8
+          },
+          "progressDelta": 0
+        }
+      ],
+      "progress": 0
+    },
+    {
+      "id": "resident-6",
+      "name": "Place 6",
+      "position": {
+        "x": 17,
+        "y": 10
+      },
+      "tags": ["repairable"],
+      "ownerId": null,
+      "inventory": {
+        "wood": 8
+      },
+      "capabilities": [
+        {
+          "id": "repair",
+          "label": "Repair fence",
+          "durationMs": 2400,
+          "actorInputs": {},
+          "objectInputs": {
+            "wood": 1
+          },
+          "actorOutputs": {},
+          "objectOutputs": {},
+          "needs": {
+            "hunger": 0,
+            "energy": -5
+          },
+          "progressDelta": 1
+        }
+      ],
+      "progress": 0
+    },
+    {
+      "id": "resident-7",
+      "name": "Place 7",
+      "position": {
+        "x": 11,
+        "y": 8
+      },
+      "tags": ["meeting"],
+      "ownerId": null,
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "resident-8",
+      "name": "Place 8",
+      "position": {
+        "x": 3,
+        "y": 4
+      },
+      "tags": ["bed"],
+      "ownerId": "resident-1",
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "resident-9",
+      "name": "Place 9",
+      "position": {
+        "x": 11,
+        "y": 8
+      },
+      "tags": ["bed"],
+      "ownerId": "resident-2",
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    },
+    {
+      "id": "resident-10",
+      "name": "Place 10",
+      "position": {
+        "x": 18,
+        "y": 4
+      },
+      "tags": ["bed"],
+      "ownerId": "resident-3",
+      "inventory": {},
+      "capabilities": [],
+      "progress": 0
+    }
+  ]
+}

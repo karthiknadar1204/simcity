@@ -149,7 +149,7 @@ export function createArchiveWorker(
           )
           .limit(1);
         if (!source) throw new Error("Checkpoint source missing.");
-        if (await contentHash(source.state) !== source.stateHash)
+        if ((await contentHash(source.state)) !== source.stateHash)
           throw new Error("Checkpoint source hash mismatch.");
         const key = `runs/${task.runId}/checkpoints/${task.payload.sequence}-${source.stateHash}.json`;
         const result = await archive.put(

@@ -283,7 +283,12 @@ export class WorldStore {
     ).map((row) => row.payload);
   }
 
-  async personalObservations(runId: string, citizenId: string, limit = 50) {
+  async personalObservations(
+    runId: string,
+    citizenId: string,
+    limit = 50,
+    before = Number.MAX_SAFE_INTEGER,
+  ) {
     const { state } = await this.current(runId);
     if (!Object.hasOwn(state.citizens, citizenId))
       throw new StoreError("Citizen not found.", 404);
@@ -295,6 +300,7 @@ export class WorldStore {
           and(
             eq(observations.runId, runId),
             eq(observations.citizenId, citizenId),
+            lte(observations.eventSequence, before),
           ),
         )
         .orderBy(desc(observations.eventSequence))

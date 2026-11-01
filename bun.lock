@@ -31,6 +31,7 @@
       "name": "web",
       "version": "0.1.0",
       "dependencies": {
+        "@repo/contracts": "workspace:*",
         "@repo/ui": "*",
         "phaser": "4.2.1",
         "react": "19.2.8",

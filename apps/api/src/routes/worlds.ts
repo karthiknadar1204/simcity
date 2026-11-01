@@ -144,6 +144,7 @@ export function worldRoutes(
         c.req.param("id"),
         c.req.param("citizenId"),
         integer(c.req.query("limit"), 50, 200),
+        integer(c.req.query("before"), Number.MAX_SAFE_INTEGER),
       ),
     }),
   );
@@ -152,6 +153,7 @@ export function worldRoutes(
     await store.current(c.req.param("id"));
     return streamSSE(c, async (stream) => {
       let sequence = -1;
+      let keepAliveAt = Date.now();
       while (!stream.aborted) {
         const { state } = await store.current(c.req.param("id"));
         if (state.sequence !== sequence) {
@@ -161,6 +163,10 @@ export function worldRoutes(
             data: JSON.stringify(state),
           });
           sequence = state.sequence;
+          keepAliveAt = Date.now();
+        } else if (Date.now() - keepAliveAt >= 5000) {
+          await stream.writeSSE({ event: "heartbeat", data: "ping" });
+          keepAliveAt = Date.now();
         }
         await stream.sleep(500);
       }

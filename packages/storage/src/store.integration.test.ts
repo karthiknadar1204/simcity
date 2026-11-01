@@ -42,6 +42,7 @@ live(
       );
       expect(retry.state.sequence).toBe(first.state.sequence);
       expect(retry.state.citizens[b!.id]!.inventory.food).toBe(3);
+      expect(await store.personalObservations(runId, a!.id, 50, 0)).toEqual([]);
       const nextGeneration = await store.claim(runId, "integration-owner");
       expect(nextGeneration).toBeGreaterThan(generation);
       await expect(

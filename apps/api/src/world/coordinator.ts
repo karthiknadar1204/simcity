@@ -50,8 +50,8 @@ export class Coordinator {
     for (const run of await this.store.list()) {
       if (run.status !== "running" || this.owned.has(run.id)) continue;
       try {
-        const restored = await this.store.load(run.id);
         const generation = await this.store.claim(run.id, this.ownerId);
+        const restored = await this.store.load(run.id);
         this.owned.set(run.id, { generation, state: restored.state });
       } catch {
         console.error(

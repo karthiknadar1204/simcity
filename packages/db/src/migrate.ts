@@ -1,11 +1,16 @@
+import type { PoolClient } from "pg";
 import { fileURLToPath } from "node:url";
-import { migrate } from "drizzle-orm/neon-serverless/migrator";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "./schema";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { requireDatabaseUrl } from "./env";
 import { createDatabase } from "./index";
 
-const { db, pool } = createDatabase(requireDatabaseUrl());
+const { pool } = createDatabase(requireDatabaseUrl());
+let client: PoolClient | undefined;
 try {
-  await migrate(db, {
+  client = await pool.connect();
+  await migrate(drizzle({ client, schema }), {
     migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
   });
   console.log("Database migrations applied.");
@@ -13,5 +18,6 @@ try {
   console.error("Migration failed. Check the connection and migration SQL.");
   process.exitCode = 1;
 } finally {
+  client?.release(true);
   await pool.end();
 }

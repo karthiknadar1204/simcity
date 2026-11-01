@@ -24,7 +24,7 @@ The real export path passed on fixture run `e0183edb-bbcd-49b9-91c6-11386c494b6d
 
 A separate process test killed a server process while three citizens slept, waited for its ownership lease to expire, and resumed from a new process. All three woke at 07:00 on day two. The pre-restart world hash and simulation time matched exactly. Three consolidation tasks retained their pre-sleep cutoffs. This is a controlled mechanics fixture, not evidence that a model independently chose sleep.
 
-The installed Neon 1.2.0 driver had a reproducible queued-connection regression. A test held the only pool slot, queued a second query, terminated the held session, and released it. The queued query stayed stuck on 1.2.0. Pinning the workspace to 1.1.0 made the same test pass. See [the upstream issue](https://github.com/neondatabase/serverless/issues/230) and [the release history](https://github.com/neondatabase/serverless/blob/main/CHANGELOG.md). No database schema or TLS settings changed for this workaround.
+The installed Neon 1.2.0 driver had a reproducible queued-connection regression. A test held the only pool slot, queued a second query, terminated the held session, and released it. The queued query stayed stuck on 1.2.0. Temporarily pinning the workspace to 1.1.0 made the same test pass, but longer WebSocket runs still dropped sessions. The final runtime now uses the standard TLS connection described below. See [the upstream issue](https://github.com/neondatabase/serverless/issues/230) and [the release history](https://github.com/neondatabase/serverless/blob/main/CHANGELOG.md). No database schema or TLS settings changed for this workaround.
 
 ## Scenario calibration and remaining day check
 
@@ -32,7 +32,7 @@ The installed Neon 1.2.0 driver had a reproducible queued-connection regression.
 
 `town-day-v2` changes declared mechanics data for a longer day: harvesting a food basket takes two hours, repairing one section takes three hours, preparing two meal portions takes 45 minutes, eating takes 20 minutes, and the square advertises a 90-minute rest capability. These affordances do not choose anyone's actions. Citizens still decide whether to use them, how many units to request, whom to talk to, and when to sleep.
 
-The server also supplies Neon's supported `ws` constructor explicitly, rather than relying on the host's global WebSocket implementation. A 160-query parallel-read/transaction check with idle periods completed with no errors. This short check does not substitute for the complete-day gate.
+The WebSocket experiment also supplied Neon's supported `ws` constructor explicitly, rather than relying on the host's global WebSocket implementation. A 160-query parallel-read/transaction check with idle periods completed with no errors. This short check does not substitute for the complete-day gate.
 
 Video was also exported from paused autonomous run `e9ddfbc8-4a56-46c8-ac2b-a11e254a2dff`, not just a manual walk fixture. The source already contained real OpenAI actor and memory calls. Their counts stayed unchanged, the sampled world hashes matched, and the 60-frame MP4 passed ffprobe and R2 readback. No new inference occurred during replay/export.
 
@@ -51,3 +51,11 @@ Recording retries keep the stable SQL interval ID and start a new BullMQ deliver
 The combined regression suite passed 42 tests across 23 files, including real Neon, Redis and R2 paths, with 240 assertions. A separate three-way concurrent provider fixture checks private contexts, shared budget accounting, serialized physical commits and idempotent replay of finished tasks. Scripted provider fixtures make no OpenAI requests and do not stand in for the complete autonomous-day check.
 
 Scripted-provider worlds are excluded from ordinary automatic startup recovery, matching the cognition worker's fixture boundary. Test harnesses can opt in explicitly. OpenAI towns and user-created operator sandboxes retain normal automatic recovery.
+
+## Current database connection
+
+The API, workers and verification scripts now use `pg` 8.23.1 and `drizzle-orm/node-postgres` over the normal PostgreSQL TLS connection to the same Neon database. The server enforces `sslmode=verify-full`, enables channel binding and reuses a small connection pool. It does not use the Neon WebSocket driver. The existing `DATABASE_URL` works without being rewritten on disk. No tables or stored data changed for this transport switch.
+
+This follows Neon's guidance for [long-running applications](https://neon.com/blog/using-neons-auto-suspend-with-long-running-applications) and Drizzle's [supported PostgreSQL adapters](https://orm.drizzle.team/docs/get-started-postgresql). The lost-BEGIN lease guard remains necessary because the node-postgres adapter also starts `BEGIN` before its internal cleanup block. Migration execution owns its connection lease separately as well.
+
+Migrations passed on the TLS connection, and the mixed read/transaction soak completed 160 queries with idle periods. All 47 integration tests passed on this final connection path, with 265 assertions across 26 files, including private memory, replay, outbox, archive and concurrency checks. Type checks, lint, default tests and builds also passed. Earlier WebSocket failures remain recorded rather than being counted as a successful full day.

@@ -1,20 +1,24 @@
-import WebSocket from "ws";
-import { Pool, neonConfig, type PoolClient } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { Pool, type PoolClient } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema";
 
 export { sql } from "drizzle-orm";
 export type Database = ReturnType<typeof createDatabase>["db"];
 
-neonConfig.webSocketConstructor = WebSocket;
-
 export function createDatabase(
   databaseUrl: string,
   options: { max?: number } = {},
 ) {
+  const connection = new URL(databaseUrl);
+  // Neon uses a publicly trusted TLS certificate. Keep certificate and host
+  // verification explicit, including when the input URL says sslmode=require.
+  connection.searchParams.set("sslmode", "verify-full");
   const pool = new Pool({
-    connectionString: databaseUrl,
+    connectionString: connection.toString(),
+    enableChannelBinding: true,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
     max: options.max ?? 5,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
@@ -33,7 +37,7 @@ export function createDatabase(
     console.error("Unexpected database pool connection error."),
   );
   const db = drizzle({ client: pool, schema });
-  // Own the lease outside Drizzle's BEGIN. Its Neon adapter starts BEGIN before
+  // Own the lease outside Drizzle's BEGIN. The adapter starts BEGIN before
   // its try/finally, so a lost BEGIN acknowledgement otherwise leaks a client.
   db.transaction = async (callback, config) => {
     const client = await pool.connect();

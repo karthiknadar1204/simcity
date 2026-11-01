@@ -131,6 +131,6 @@ The paid pilot uses the versioned `town-day-v2` scenario and advances the clock 
 
 Initial context compilation targets 8,000 tokens. Exact tool history can use separate headroom up to a 16,000-token complete request. Optional duplicated memories compact first; exact receipts and current commitment terms remain. Actor concurrency is two per queue, background memory concurrency is one, and media rendering concurrency is one. The spend cap is shared, not a fresh cap per citizen.
 
-Neon is pinned to 1.1.0 through a root override because 1.2.0 fails the queued-disconnection regression test. See [the recovery evidence and upstream issue](./docs/phase-4-and-5.md). Migration `0004` adds recorded interval/video metadata and historical completion boundaries. No Neo4j is used.
+The persistent Bun services use `pg` 8.23.1 with Drizzle's node-postgres adapter and a verified TLS connection to Neon. This replaces the WebSocket path that dropped sessions during longer pilots. See [the recovery evidence](./docs/phase-4-and-5.md). Migration `0004` adds recorded interval/video metadata and historical completion boundaries. No Neo4j is used.
 
 The database package also owns transaction leases outside the adapter's `BEGIN`, including failure cleanup. Long work can prompt an awake citizen to reconsider at a personal rhythm boundary, critical need or accepted promise deadline. These are decision notifications, not scheduled actions. Place navigation approaches a reachable interaction tile, while the model chooses the place and subsequent action.

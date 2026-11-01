@@ -106,7 +106,7 @@ export class WorldStore {
       version: 1,
       runId: state.runId,
       parentRunId: null,
-      engineVersion: "phase4-v1",
+      engineVersion: "phase4-v2",
       schemaVersion: "drizzle-0004",
       scenarioId: scenario.id,
       scenarioHash: await contentHash(scenario),
@@ -390,13 +390,16 @@ export class WorldStore {
       .limit(100);
   }
 
-  async recoverableRuns() {
+  async recoverableRuns(includeScriptedProviders = false) {
     return this.db
       .select({ id: runs.id })
       .from(runs)
       .where(
         and(
           eq(runs.status, "running"),
+          includeScriptedProviders
+            ? undefined
+            : sql`coalesce(${runs.manifest}->'agent'->>'provider','') <> 'fixture'`,
           or(
             isNull(runs.leaseUntil),
             lte(runs.leaseUntil, sql`clock_timestamp()`),

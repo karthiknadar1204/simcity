@@ -63,6 +63,8 @@ const report: Record<string, unknown> = {
   kind: "live-openai-three-citizen-development-pilot",
   startedAt: new Date().toISOString(),
   scriptedCitizenActions: false,
+  scheduler:
+    "One actor task and one memory task at a time; advance only to the next recorded deadline. Production actor queue concurrency is two and has a separate concurrent fixture check.",
   initialConditions:
     "Versioned town-day-v2: morning public-square positions, private biography/motivations and 22:00/07:00 rhythm preferences. Long work batches, meal durations, public resting capability and kitchen resources are declared scenario data. No citizen action sequence is supplied.",
 };
@@ -232,13 +234,47 @@ try {
     recorded.push(...rows);
     cursor = rows[rows.length - 1]!.sequence;
   }
-  const planMemories = recorded
-    .filter((event) => event.kind === "plan.updated")
-    .flatMap((event) =>
-      Object.values(event.patch.citizens ?? {}).flatMap(
-        (citizen) => citizen.plan?.evidenceIds ?? [],
-      ),
-    );
+  let memoryChoice: {
+    citizenId: string;
+    eventSequence: number;
+    sourceId: string;
+    kind: string;
+  } | null = null;
+  for (const event of recorded.filter(
+    (event) => event.kind === "plan.updated",
+  )) {
+    for (const [citizenId, citizen] of Object.entries(
+      event.patch.citizens ?? {},
+    )) {
+      for (const id of citizen.plan?.evidenceIds ?? []) {
+        const found = await memory.read(runId, citizenId, event.sequence, id);
+        const experienced =
+          found?.kind === "source"
+            ? found.source.sequence > 0
+            : found?.kind === "memory"
+              ? found.memory.sourceIds.some(
+                  (source) => !source.startsWith("seed-"),
+                )
+              : found?.kind === "commitment"
+                ? found.commitment.sourceIds.some(
+                    (source) => !source.startsWith("seed-"),
+                  )
+                : false;
+        if (experienced) {
+          memoryChoice = {
+            citizenId,
+            eventSequence: event.sequence,
+            sourceId: id,
+            kind: found!.kind,
+          };
+          break;
+        }
+      }
+      if (memoryChoice) break;
+    }
+    if (memoryChoice) break;
+  }
+  report.memoryChoiceWitness = memoryChoice;
   const gates = {
     threeIndependentContexts: identities.size === 3,
     dayElapsed: state.simTimeMs - input.startTimeMs >= input.rules.dayLengthMs,
@@ -248,7 +284,7 @@ try {
     citizenInitiatedConversation: conversations.some(
       (item) => item.turns.length >= 2,
     ),
-    memoryInformedChoice: planMemories.some((id) => !id.startsWith("seed-")),
+    memoryInformedChoice: memoryChoice !== null,
     revisedPlan: Object.values(state.citizens).some(
       (citizen) => (citizen.plan?.version ?? 0) > 1,
     ),
@@ -262,12 +298,14 @@ try {
           job.finishedAt >= input.rules.dayLengthMs,
       ),
     ),
-    nextMorningAwake: input.citizens.every((citizen) => {
-      const job = state.citizens[citizen.id]!.actionId
-        ? state.jobs[state.citizens[citizen.id]!.actionId!]
-        : null;
-      return job?.kind !== "sleep";
-    }),
+    nextMorningAwake:
+      state.simTimeMs >= end &&
+      input.citizens.every((citizen) => {
+        const job = state.citizens[citizen.id]!.actionId
+          ? state.jobs[state.citizens[citizen.id]!.actionId!]
+          : null;
+        return job?.kind !== "sleep";
+      }),
     persistentExperiences: currentMemories.every((items) =>
       items.some((item) =>
         item.sourceIds.some((id) => !id.startsWith("seed-")),

@@ -13,7 +13,7 @@
     "db:studio": "bun run --cwd packages/db db:studio",
     "db:check": "bun run --cwd packages/db db:check",
     "redis:start": "bun run scripts/redis-start.ts",
-    "test:integration": "RUN_INTEGRATION=1 bun test packages/storage/src packages/jobs/src packages/agent-runtime/src packages/db/src",
+    "test:integration": "RUN_INTEGRATION=1 bun test packages/storage/src packages/jobs/src packages/agent-runtime/src packages/db/src apps/api/src",
     "verify:restart": "bun run --cwd apps/api build && bun run scripts/verify-restart.ts",
     "verify:autonomy": "RUN_MODEL_TESTS=1 bun run scripts/verify-autonomy.ts",
     "verify:thinking-restart": "bun run scripts/verify-thinking-restart.ts",

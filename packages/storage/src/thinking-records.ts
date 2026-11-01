@@ -163,7 +163,7 @@ export async function recordThinkingTriggers(
     if (
       !control.taskId &&
       result.state.simTimeMs >= control.nextReviewAtMs &&
-      (!job || job.kind === "move")
+      job?.kind !== "sleep"
     )
       reasons.push("review");
     if (job?.kind === "sleep") {

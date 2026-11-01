@@ -50,3 +50,33 @@ test("local movement targets cannot disclose tiles hidden behind a wall", () => 
     destination: { x: 3, y: 5 },
   });
 });
+test("a chosen public place resolves to a reachable interaction tile while beds keep their exact tile requirement", () => {
+  const world = createWorld(scenario, "approach-fixture"),
+    [self, other] = Object.values(world.citizens),
+    place = world.objects.storehouse!;
+  other!.position = { ...place.position };
+  const action = actionFor(
+    "world_move",
+    { targetId: place.id, x: null, y: null },
+    world,
+    self!.id,
+  );
+  expect(action?.kind).toBe("move");
+  if (action?.kind !== "move") throw new Error("Expected a walk");
+  expect(
+    Math.abs(action.destination.x - place.position.x) +
+      Math.abs(action.destination.y - place.position.y),
+  ).toBe(1);
+  expect(action.destination).not.toEqual(other!.position);
+  const bed = Object.values(world.objects).find(
+    (object) => object.ownerId === self!.id && object.tags.includes("bed"),
+  )!;
+  expect(
+    actionFor(
+      "world_move",
+      { targetId: bed.id, x: null, y: null },
+      world,
+      self!.id,
+    ),
+  ).toEqual({ kind: "move", actorId: self!.id, destination: bed.position });
+});

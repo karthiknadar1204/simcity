@@ -41,3 +41,30 @@ export function findPath(
   }
   return null;
 }
+
+// The actor chooses the place. Navigation chooses a legal tile within reach;
+// it does not choose an interaction or execute one on arrival.
+export function approachDestination(
+  world: WorldState,
+  actorId: string,
+  targetId: string,
+): Point | null {
+  const target = world.objects[targetId];
+  if (!target) return null;
+  const { x, y } = target.position,
+    candidates = target.tags.includes("bed")
+      ? [{ x, y }]
+      : [
+          { x, y },
+          { x: x + 1, y },
+          { x, y: y + 1 },
+          { x: x - 1, y },
+          { x, y: y - 1 },
+        ];
+  const paths = candidates
+    .map((point) => findPath(world, actorId, point))
+    .filter((path): path is Point[] => path !== null);
+  paths.sort((a, b) => a.length - b.length);
+  const path = paths[0];
+  return path ? path[path.length - 1]! : null;
+}

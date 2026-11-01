@@ -87,12 +87,36 @@ export class RecordingStore {
         .orderBy(desc(checkpoints.sequence))
         .limit(2);
       if (!rows[0]) throw new Error("Checkpoint not found.");
-      return queueRecording(
+      const id = await queueRecording(
         tx,
         rows[0].state,
         rows[1]?.sequence ?? rows[0].sequence,
         rows[1]?.simTimeMs ?? rows[0].simTimeMs,
       );
+      const [task] = await tx
+        .select()
+        .from(backgroundTasks)
+        .where(eq(backgroundTasks.id, id))
+        .for("update");
+      if (task?.status === "failed" && "fromSequence" in task.payload) {
+        await tx
+          .update(backgroundTasks)
+          .set({
+            status: "pending",
+            attempts: 0,
+            error: null,
+            payload: {
+              ...task.payload,
+              retryGeneration: (task.payload.retryGeneration ?? 0) + 1,
+            },
+          })
+          .where(eq(backgroundTasks.id, id));
+        await tx
+          .update(outbox)
+          .set({ publishedAt: null })
+          .where(eq(outbox.taskId, id));
+      }
+      return id;
     });
   }
   async source(payload: RecordingPayload) {
@@ -246,7 +270,13 @@ export class RecordingStore {
       .limit(1);
     if (!existing)
       throw new Error("Recording task does not match its interval.");
-    if (existing.manifest) return existing.manifest;
+    if (existing.manifest) {
+      await this.db
+        .update(backgroundTasks)
+        .set({ status: "completed", error: null })
+        .where(eq(backgroundTasks.id, taskId));
+      return existing.manifest;
+    }
     const source = await this.source(payload),
       body = JSON.stringify(source),
       digest = new Bun.CryptoHasher("sha256").update(body).digest("hex");

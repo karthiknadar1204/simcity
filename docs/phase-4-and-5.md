@@ -35,3 +35,19 @@ The installed Neon 1.2.0 driver had a reproducible queued-connection regression.
 The server also supplies Neon's supported `ws` constructor explicitly, rather than relying on the host's global WebSocket implementation. A 160-query parallel-read/transaction check with idle periods completed with no errors. This short check does not substitute for the complete-day gate.
 
 Video was also exported from paused autonomous run `e9ddfbc8-4a56-46c8-ac2b-a11e254a2dff`, not just a manual walk fixture. The source already contained real OpenAI actor and memory calls. Their counts stayed unchanged, the sampled world hashes matched, and the 60-frame MP4 passed ffprobe and R2 readback. No new inference occurred during replay/export.
+
+## Decision and recovery changes from the day checks
+
+A citizen chooses a place such as the kitchen. The navigation helper finds a reachable tile within that place's interaction distance and the engine walks there tile by tile. It does not choose what to do after arrival. Beds still require their exact tile. This avoids repeated attempts to stand on a person who is already at the selected object. Exact x/y movement still means that exact visible tile.
+
+The initial context includes the citizen's latest rejected tool request and exact result from a completed earlier turn. This feedback is scoped to the citizen and selected event boundary. It is historical feedback, not a claim that old remote conditions still hold. Earlier feedback and all accepted outcomes remain in the full SQL trace. A fresh decision can therefore reconsider a failed route or parameter without forgetting the rejection.
+
+Long work and waits can trigger an awake decision at a personal rhythm boundary, an accepted promise deadline or a needs threshold. The default attention thresholds are energy 100 and hunger 700, with another notification at the 0/1000 extremes. These thresholds request a decision; they do not choose a destination, cancel work or force sleep. A sleeping citizen keeps its chosen timer until completion or a real nearby alert. Periodic plan reviews apply during movement and idle time; an already chosen long activity otherwise progresses to completion or a relevant interruption.
+
+A fault-injection test reproduced a second connection problem in the Neon Drizzle adapter: a lost `BEGIN` acknowledgement could leave a leased client unreleased. The database package now owns that lease outside the adapter's transaction and destroys a client on transaction failure. It sets the transaction's statement timeout to seven seconds and its idle-in-transaction timeout to ten seconds. The same injected fault now releases the client, and a fresh query succeeds. This is separate from the Neon 1.2.0 queue regression described above.
+
+Recording retries keep the stable SQL interval ID and start a new BullMQ delivery generation. Old failed deliveries cannot block the explicit retry. A published manifest remains immutable, and a repeated publisher reconciles the completed task state instead of leaving a queued task behind.
+
+The combined regression suite passed 42 tests across 23 files, including real Neon, Redis and R2 paths, with 240 assertions. A separate three-way concurrent provider fixture checks private contexts, shared budget accounting, serialized physical commits and idempotent replay of finished tasks. Scripted provider fixtures make no OpenAI requests and do not stand in for the complete autonomous-day check.
+
+Scripted-provider worlds are excluded from ordinary automatic startup recovery, matching the cognition worker's fixture boundary. Test harnesses can opt in explicitly. OpenAI towns and user-created operator sandboxes retain normal automatic recovery.

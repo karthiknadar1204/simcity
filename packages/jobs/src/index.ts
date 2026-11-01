@@ -143,9 +143,14 @@ export async function dispatchOutbox(
     .orderBy(asc(backgroundTasks.createdAt))
     .limit(100);
   for (const task of tasks) {
-    const existing = await queue.getJob(task.id);
+    const generation =
+      "retryGeneration" in task.payload
+        ? task.payload.retryGeneration
+        : undefined;
+    const deliveryId = generation ? `${task.id}-retry-${generation}` : task.id;
+    const existing = await queue.getJob(deliveryId);
     if (!existing)
-      await queue.add(task.kind, { taskId: task.id }, { jobId: task.id });
+      await queue.add(task.kind, { taskId: task.id }, { jobId: deliveryId });
     else if ((await existing.getState()) === "failed") {
       await db
         .update(backgroundTasks)
@@ -311,5 +316,12 @@ export function createArchiveWorker(
   };
 }
 
-export function createMediaQueue(redisUrl:string){return createArchiveQueue(redisUrl,queueNames.media)}
-export function createMediaWorker(redisUrl:string,processTask:(id:string)=>Promise<void>){return createTaskWorker(redisUrl,queueNames.media,processTask,1,60000)}
+export function createMediaQueue(redisUrl: string) {
+  return createArchiveQueue(redisUrl, queueNames.media);
+}
+export function createMediaWorker(
+  redisUrl: string,
+  processTask: (id: string) => Promise<void>,
+) {
+  return createTaskWorker(redisUrl, queueNames.media, processTask, 1, 60000);
+}

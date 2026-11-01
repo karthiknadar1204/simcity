@@ -25,6 +25,8 @@ import {
   memoryStreams,
   contextCompilations,
   queryEmbeddings,
+  modelRounds,
+  thinkingTurns,
   memoryTasks,
   backgroundTasks,
 } from "@repo/db/tables";
@@ -382,6 +384,32 @@ export class MemoryStore {
       .limit(Math.min(100, Math.max(1, limit)))
       .offset(Math.max(0, offset));
   }
+  async recentToolRejections(runId: string, citizenId: string, asOf: number) {
+    return this.db
+      .select({
+        tool: sql`${modelRounds.answer}->'call'`,
+        outcome: modelRounds.outcome,
+        recordedAtSequence: thinkingTurns.finishedSequence,
+      })
+      .from(modelRounds)
+      .innerJoin(thinkingTurns, eq(thinkingTurns.id, modelRounds.taskId))
+      .innerJoin(backgroundTasks, eq(backgroundTasks.id, thinkingTurns.id))
+      .where(
+        and(
+          eq(backgroundTasks.runId, runId),
+          eq(thinkingTurns.citizenId, citizenId),
+          lte(thinkingTurns.finishedSequence, asOf),
+          sql`${modelRounds.outcome}->>'status' = 'rejected'`,
+        ),
+      )
+      .orderBy(
+        desc(thinkingTurns.finishedSequence),
+        desc(backgroundTasks.createdAt),
+        desc(modelRounds.round),
+      )
+      .limit(1);
+  }
+
   async recentActions(runId: string, citizenId: string, asOf: number) {
     return this.db
       .select({ command: commands.request, receipt: commands.receipt })

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import "./env";
-import { createDatabase } from "./index";
+import { createDatabase, sql } from "./index";
 const live = process.env.RUN_INTEGRATION === "1" ? test : test.skip;
 live(
   "a lost leased database session fails its work and the pool accepts a fresh query",
@@ -81,4 +81,55 @@ live(
     }
   },
   20000,
+);
+live(
+  "a lost BEGIN acknowledgement releases its leased client instead of leaking an idle transaction",
+  async () => {
+    const { pool, db } = createDatabase(process.env.DATABASE_URL!, { max: 1 }),
+      client = await pool.connect();
+    let injected = false,
+      callbacks = 0;
+    client.query = new Proxy(client.query, {
+      apply(target, self, args) {
+        const pending = Reflect.apply(target, self, args);
+        const first = args[0],
+          text = typeof first === "string" ? first : first?.text;
+        if (!injected && typeof text === "string" && /^begin\b/i.test(text)) {
+          injected = true;
+          return Promise.resolve(pending).then(() => {
+            throw new Error("Query read timeout");
+          });
+        }
+        return pending;
+      },
+    });
+    client.release();
+    try {
+      await expect(
+        db.transaction(async () => {
+          callbacks++;
+        }),
+      ).rejects.toThrow();
+      expect(injected).toBeTrue();
+      expect(callbacks).toBe(0);
+      expect(pool.totalCount).toBe(0);
+      expect(
+        (await pool.query<{ ok: number }>("select 1 as ok")).rows[0]!.ok,
+      ).toBe(1);
+      await db.transaction(async (tx) => {
+        const result = await tx.execute(
+          sql`show idle_in_transaction_session_timeout`,
+        );
+        expect(result.rows[0]?.idle_in_transaction_session_timeout).toBe("10s");
+      });
+    } finally {
+      try {
+        client.release(true);
+      } catch {
+        /* The corrected adapter has already released it. */
+      }
+      await pool.end();
+    }
+  },
+  15000,
 );

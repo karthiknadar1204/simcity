@@ -1,6 +1,6 @@
 // Infrastructure timing. Scenario time/physics remain in versioned scenario data.
 export const runtimePolicy = {
-  version: "world-runtime-v4",
+  version: "world-runtime-v5",
   tickIntervalMs: 500,
   discoveryIntervalMs: 5000,
   ownershipLeaseMs: 15000,

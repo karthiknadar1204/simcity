@@ -25,7 +25,7 @@ Each checkpoint queues a recording interval from the previous checkpoint, in the
 
 Unpublished or failed model tasks remain in PostgreSQL. Search vectors, memory records, commitments and their version history also remain there. The R2 viewer loads the recorded world from the chunk; its personal-memory inspector still queries PostgreSQL at the selected boundary. This phase does not delete hot data or claim a complete cold-database restore.
 
-The worker writes a content-addressed JSON object to the private R2 bucket, reads the entire object back, and verifies its SHA-256 and byte length. Only then does it publish the interval manifest and completed task state in PostgreSQL. Repeated publication returns the existing immutable descriptor. Failed uploads retain hot data and show task failure after bounded attempts.
+The worker writes a content-addressed JSON object to the private R2 bucket, reads the entire object back, and verifies its SHA-256 and byte length. Only then does it publish the interval manifest and completed task state in PostgreSQL. Repeated publication returns the existing immutable descriptor. Failed uploads retain hot data and show task failure after bounded attempts. Requesting the latest archive again explicitly resets a failed interval with a new delivery generation. The stable interval ID and any published manifest remain unchanged.
 
 Lookup uses the recording manifest in PostgreSQL. It does not scan the R2 bucket. Chunks are limited to 20,000 events, 250 completed actor traces, 500 published memory task IDs and 16 MiB of JSON. Oversized intervals fail visibly and retain their source data; automatic subdivision and retention policies are later work.
 

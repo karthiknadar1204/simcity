@@ -267,7 +267,9 @@ export function RecordingsPanel({
             body: "{}",
           })
             .then(() => {
-              setMessage("Latest checkpoint interval queued for archive.");
+              setMessage(
+                "Latest checkpoint interval requested. Existing published intervals are reused.",
+              );
               return refresh();
             })
             .catch((e) => setMessage(e.message))

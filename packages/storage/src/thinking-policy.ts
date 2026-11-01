@@ -6,7 +6,46 @@ import {
 } from "@repo/contracts";
 import { citizenView, applyEvent, perceive } from "@repo/engine";
 
-export function reviewDeadline(state: WorldState, citizenId: string) {
+export function attentionDeadline(state: WorldState, citizenId: string) {
+  const self = state.citizens[citizenId]!,
+    now = state.simTimeMs,
+    rules = state.rules,
+    times: number[] = [];
+  for (const minute of self.dailyRhythm
+    ? [self.dailyRhythm.sleepMinute, self.dailyRhythm.wakeMinute]
+    : []) {
+    const offset = minute * 60000;
+    if (offset < rules.dayLengthMs) {
+      let time =
+        Math.floor(now / rules.dayLengthMs) * rules.dayLengthMs + offset;
+      if (time <= now) time += rules.dayLengthMs;
+      times.push(time);
+    }
+  }
+  const tick = Math.floor(now / rules.metabolismIntervalMs) + 1;
+  for (const boundary of [agentPolicy.attentionEnergy, 0])
+    if (self.needs.energy > boundary && rules.energyPerTick > 0)
+      times.push(
+        (tick +
+          Math.ceil((self.needs.energy - boundary) / rules.energyPerTick) -
+          1) *
+          rules.metabolismIntervalMs,
+      );
+  for (const boundary of [agentPolicy.attentionHunger, 1000])
+    if (self.needs.hunger < boundary && rules.hungerPerTick > 0)
+      times.push(
+        (tick +
+          Math.ceil((boundary - self.needs.hunger) / rules.hungerPerTick) -
+          1) *
+          rules.metabolismIntervalMs,
+      );
+  return Math.min(...times);
+}
+export function reviewDeadline(
+  state: WorldState,
+  citizenId: string,
+  commitmentDeadlines: number[] = [],
+) {
   const citizen = state.citizens[citizenId]!;
   const fallback = state.simTimeMs + agentPolicy.idleReviewMs;
   const requested = citizen.plan?.nextReviewAtMs ?? fallback;
@@ -15,8 +54,16 @@ export function reviewDeadline(state: WorldState, citizenId: string) {
   const conversation = activeConversation(state, citizenId);
   if (conversation && conversation.nextSpeakerId !== citizenId)
     return conversation.expiresAtMs;
-  if (job && job.kind !== "move") return job.endsAt;
-  return job?.status === "running" ? deadline : Math.min(deadline, fallback);
+  if (job?.kind === "sleep") return job.endsAt;
+  const attention = Math.min(
+    attentionDeadline(state, citizenId),
+    ...commitmentDeadlines.filter((time) => time > state.simTimeMs),
+  );
+  if (job && job.kind !== "move") return Math.min(job.endsAt, attention);
+  return Math.min(
+    attention,
+    job?.status === "running" ? deadline : Math.min(deadline, fallback),
+  );
 }
 
 export function decisionTriggers(
@@ -30,6 +77,14 @@ export function decisionTriggers(
   let current = before;
   for (const event of events) {
     const next = applyEvent(current, event);
+    const self = current.citizens[citizenId]!,
+      sleeping = self.actionId && current.jobs[self.actionId]?.kind === "sleep";
+    if (
+      !sleeping &&
+      event.kind === "clock.advanced" &&
+      next.simTimeMs >= attentionDeadline(current, citizenId)
+    )
+      reasons.add("scheduled-attention");
     const received = perceive(next, event).some(
       (observation) => observation.citizenId === citizenId,
     );

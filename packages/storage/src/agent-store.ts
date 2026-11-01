@@ -4,6 +4,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   inArray,
   isNull,
   lte,
@@ -20,6 +21,7 @@ import {
   outbox,
   runs,
   thinkingTurns,
+  commitmentVersions,
 } from "@repo/db/tables";
 import {
   agentPolicy,
@@ -418,7 +420,29 @@ export class AgentStore {
         );
       if (control?.taskId !== guard.taskId || control.version !== guard.version)
         return;
-      const nextReviewAtMs = reviewDeadline(run.state, guard.citizenId);
+      const deadlines = await tx
+        .select({ time: commitmentVersions.deadlineMs })
+        .from(commitmentVersions)
+        .where(
+          and(
+            eq(commitmentVersions.runId, runId),
+            eq(commitmentVersions.citizenId, guard.citizenId),
+            eq(commitmentVersions.status, "accepted"),
+            gt(commitmentVersions.deadlineMs, run.simTimeMs),
+            lte(commitmentVersions.availableSequence, run.sequence),
+            or(
+              isNull(commitmentVersions.supersededSequence),
+              gt(commitmentVersions.supersededSequence, run.sequence),
+            ),
+          ),
+        )
+        .orderBy(asc(commitmentVersions.deadlineMs))
+        .limit(1);
+      const nextReviewAtMs = reviewDeadline(
+        run.state,
+        guard.citizenId,
+        deadlines.flatMap((row) => (row.time === null ? [] : [row.time])),
+      );
       await tx
         .update(thinkingTurns)
         .set({

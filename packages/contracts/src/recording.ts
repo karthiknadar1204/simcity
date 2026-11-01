@@ -36,6 +36,7 @@ export type RecordingPayload = {
   runId: string;
   fromSequence: number;
   toSequence: number;
+  retryGeneration?: number;
 };
 export type VideoPayload = {
   runId: string;

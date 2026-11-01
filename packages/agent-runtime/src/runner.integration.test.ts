@@ -2,7 +2,7 @@
 import { test, expect } from "bun:test";
 import "@repo/db/env";
 import { createDatabase } from "@repo/db";
-import { AgentStore, WorldStore } from "@repo/storage";
+import { AgentStore, WorldStore, MemoryStore } from "@repo/storage";
 import {
   agentPolicy,
   parseScenario,
@@ -91,6 +91,24 @@ live(
       expect(recorded[0]!.outcome?.status).toBe("rejected");
       expect(recorded[1]!.outcome?.status).toBe("accepted");
       const current = await worlds.current(runId);
+      const memory = new MemoryStore(db);
+      expect(
+        await memory.recentToolRejections(
+          runId,
+          citizen.id,
+          current.state.sequence,
+        ),
+      ).toHaveLength(1);
+      expect(
+        await memory.recentToolRejections(
+          runId,
+          input.citizens[1]!.id,
+          current.state.sequence,
+        ),
+      ).toHaveLength(0);
+      expect(
+        await memory.recentToolRejections(runId, citizen.id, 0),
+      ).toHaveLength(0);
       expect(current.state.citizens[citizen.id]!.inventory).toEqual(
         citizen.inventory,
       );

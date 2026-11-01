@@ -12,10 +12,10 @@ export function isTransientDatabaseError(error: unknown): boolean {
       cause?: unknown;
     };
     if (
-      ["08000", "08003", "08006", "57P01", "40001", "40P01"].includes(
+      ["08000", "08003", "08006", "57P01", "40001", "40P01", "25P03"].includes(
         item.code ?? "",
       ) ||
-      /query read timeout|connection terminated|connection.*(?:closed|reset)|ECONNRESET|ETIMEDOUT|websocket.*(?:closed|error)/i.test(
+      /statement timeout|lock timeout|query read timeout|connection terminated|connection.*(?:closed|reset)|ECONNRESET|ETIMEDOUT|websocket.*(?:closed|error)/i.test(
         item.message ?? "",
       )
     )

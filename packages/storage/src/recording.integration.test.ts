@@ -1,3 +1,5 @@
+import { backgroundTasks } from "@repo/db/tables";
+import { eq } from "drizzle-orm";
 import { test, expect } from "bun:test";
 import "@repo/db/env";
 import { createDatabase } from "@repo/db";
@@ -44,6 +46,18 @@ live(
         rows = await store.list(runId),
         row = rows.find((row) => row.chunk.id === id)!;
       expect(row.chunk.manifest).toBeNull();
+      await db
+        .update(backgroundTasks)
+        .set({
+          status: "failed",
+          attempts: 5,
+          error: "fixture archive failure",
+        })
+        .where(eq(backgroundTasks.id, id));
+      expect(await store.queueExisting(runId, current.state.sequence)).toBe(id);
+      expect(
+        (await store.list(runId)).find((row) => row.chunk.id === id)?.status,
+      ).toBe("pending");
       const payload = {
         runId,
         fromSequence: row.chunk.fromSequence,
@@ -51,6 +65,11 @@ live(
       };
       const manifest = await store.publish(id, payload, archive);
       expect(manifest.bytes).toBeGreaterThan(0);
+      await db
+        .update(backgroundTasks)
+        .set({ status: "queued" })
+        .where(eq(backgroundTasks.id, id));
+      expect(await store.publish(id, payload, archive)).toEqual(manifest);
       const source = await store.read(runId, id, archive);
       expect(
         await contentHash(

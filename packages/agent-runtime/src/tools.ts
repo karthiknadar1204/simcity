@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { citizenView, canSeeTile } from "@repo/engine";
+import { citizenView, canSeeTile, approachDestination } from "@repo/engine";
 import {
   planProposalSchema,
   parseCommand,
@@ -64,7 +64,7 @@ const definitions = {
   },
   world_move: {
     description:
-      "Start navigation to a known place ID, or a nearby tile using x/y. For place ID set x/y null; for tile set targetId null. Yields on accepted walking job.",
+      "Approach a known place to a reachable tile within interaction distance. Beds require their exact tile. Or choose an exact nearby visible tile using x/y. For place ID set x/y null; for tile set targetId null. Already within reach can finish immediately. Yields while walking.",
     schema: z.strictObject({
       targetId: id.nullable(),
       x: whole.nullable(),
@@ -198,8 +198,15 @@ export function actionFor(
         [...self.knownEntityIds, ...visible].includes(args.targetId)
           ? state.objects[args.targetId]
           : undefined;
+      const approach = target
+        ? approachDestination(state, citizenId, target.id)
+        : null;
+      if (target && !approach)
+        throw new Error(
+          "No reachable interaction tile at this known place. Choose another destination or wait for a relevant change.",
+        );
       const destination =
-        target?.position ??
+        approach ??
         (args.targetId === null &&
         typeof args.x === "number" &&
         typeof args.y === "number" &&

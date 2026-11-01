@@ -259,19 +259,21 @@ export class ContextCompiler {
     const { runId } = state,
       citizenId = guard.citizenId,
       boundary = state.sequence;
-    const [recent, commitments, counts, pending, recentActions] =
-      await Promise.all([
-        this.memory.sources(runId, citizenId, boundary, undefined, 20),
-        this.memory.commitments(runId, citizenId, boundary),
-        this.memory.obligationCounts(
-          runId,
-          citizenId,
-          boundary,
-          state.simTimeMs,
-        ),
-        this.memory.pendingSources(runId, citizenId, boundary),
-        this.memory.recentActions(runId, citizenId, boundary),
-      ]);
+    const [
+      recent,
+      commitments,
+      counts,
+      pending,
+      recentActions,
+      toolRejections,
+    ] = await Promise.all([
+      this.memory.sources(runId, citizenId, boundary, undefined, 20),
+      this.memory.commitments(runId, citizenId, boundary),
+      this.memory.obligationCounts(runId, citizenId, boundary, state.simTimeMs),
+      this.memory.pendingSources(runId, citizenId, boundary),
+      this.memory.recentActions(runId, citizenId, boundary),
+      this.memory.recentToolRejections(runId, citizenId, boundary),
+    ]);
     const base = buildContext(
       state,
       citizenId,
@@ -286,6 +288,11 @@ export class ContextCompiler {
       })),
       reasons,
     );
+    base.recentToolRejections = {
+      historicalFeedback: true,
+      items: toolRejections,
+      rule: "Exact prior tool rejection. Compare its recorded boundary with current prerequisites; it does not assert current remote state. Full tool history remains recorded.",
+    };
     const self = state.citizens[citizenId]!;
     const ownJob = self.actionId ? state.jobs[self.actionId] : null;
     base.self = { ...(base.self as object), job: jobView(ownJob) };

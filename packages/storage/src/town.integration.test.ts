@@ -98,6 +98,21 @@ live(
       const restored = await new WorldStore(db).load(runId);
       expect(restored.state.jobs[jobId]).toEqual(sleep.state.jobs[jobId]);
       expect(restored.stateHash).toBe((await worlds.current(runId)).stateHash);
+      await execute({
+        id: "fixture-running",
+        action: { kind: "set-status", status: "running" },
+      });
+      await worlds.release(runId, owner, await worlds.claim(runId, owner));
+      expect(
+        (await worlds.recoverableRuns()).some((row) => row.id === runId),
+      ).toBeFalse();
+      expect(
+        (await worlds.recoverableRuns(true)).some((row) => row.id === runId),
+      ).toBeTrue();
+      await execute({
+        id: "fixture-paused",
+        action: { kind: "set-status", status: "paused" },
+      });
       console.log(`Three citizen fixture ${runId}`);
     } finally {
       if (runId)

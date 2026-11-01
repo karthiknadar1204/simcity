@@ -79,3 +79,44 @@ test("an idle resident reviews promptly even when its project has a later review
     state.simTimeMs + agentPolicy.idleReviewMs,
   );
 });
+
+test("long activities get a needs or personal-clock review without forcing a replacement action", () => {
+  const state = createWorld(scenario, "attention-timer-fixture"),
+    self = Object.values(state.citizens)[0]!;
+  self.needs = { energy: 101, hunger: 699 };
+  const waiting = applyCommand(state, {
+    id: "wait-for-attention",
+    action: { kind: "wait", actorId: self.id, durationMs: 600000 },
+  }).state;
+  expect(reviewDeadline(waiting, self.id)).toBe(state.simTimeMs + 60000);
+  const progressed = applyCommand(waiting, {
+    id: "attention-tick",
+    action: { kind: "advance", durationMs: 60000 },
+  });
+  expect(
+    decisionTriggers(waiting, progressed.state, progressed.events, self.id),
+  ).toContain("scheduled-attention");
+  expect(progressed.state.citizens[self.id]!.actionId).toBe(
+    waiting.citizens[self.id]!.actionId,
+  );
+  const evening = createWorld(
+      {
+        ...scenario,
+        startTimeMs: 21 * 3600000 + 59 * 60000,
+        objects: scenario.objects.map((o) => ({
+          ...o,
+          ...(o.regeneration
+            ? { regeneration: { ...o.regeneration, nextAt: 22 * 3600000 } }
+            : {}),
+        })),
+      },
+      "rhythm-fixture",
+    ),
+    resident = Object.values(evening.citizens)[0]!;
+  resident.dailyRhythm = { sleepMinute: 1320, wakeMinute: 420 };
+  const job = applyCommand(evening, {
+    id: "long-wait",
+    action: { kind: "wait", actorId: resident.id, durationMs: 3600000 },
+  }).state;
+  expect(reviewDeadline(job, resident.id)).toBe(22 * 3600000);
+});

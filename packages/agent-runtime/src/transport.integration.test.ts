@@ -88,6 +88,9 @@ live(
       expect(Object.values(once.state.jobs)).toHaveLength(1);
       await runner.run(taskId);
       expect(calls).toBe(1);
+      expect((await agents.status(runId, citizen.id, 0))!.turns).toHaveLength(
+        0,
+      );
       expect((await worlds.current(runId)).stateHash).toBe(once.stateHash);
       expect((await agents.rounds(taskId))[0]!.outcome?.status).toBe(
         "accepted",
@@ -105,3 +108,110 @@ live(
   },
   60000,
 );
+live(
+  "an answer held in memory survives a transient persistence failure without another provider call",
+  async () => {
+    const { db, pool } = createDatabase(process.env.DATABASE_URL!),
+      worlds = new WorldStore(db),
+      owner = crypto.randomUUID();
+    let runId = "",
+      calls = 0,
+      fail = true;
+    class InterruptedAnswers extends AgentStore {
+      override async saveAnswer(...args: Parameters<AgentStore["saveAnswer"]>) {
+        if (fail) {
+          fail = false;
+          throw new Error("Query read timeout");
+        }
+        return super.saveAnswer(...args);
+      }
+    }
+    const agents = new InterruptedAnswers(db),
+      port = {
+        async execute(id: string, command: Command, guard?: AgentGuard) {
+          return worlds.execute(
+            id,
+            owner,
+            await worlds.claim(id, owner),
+            command,
+            guard,
+          );
+        },
+      };
+    try {
+      const input = parseScenario(scenario),
+        citizen = input.citizens[0]!;
+      runId = (
+        await worlds.create(input, "answer-persistence-fixture", undefined, {
+          provider: "fixture",
+          citizenId: citizen.id,
+          model: agentPolicy.model,
+          maxRequests: 4,
+          spendingLimitMicroUsd: 100000,
+        })
+      ).state.runId;
+      await port.execute(runId, {
+        id: "start",
+        action: { kind: "set-status", status: "running" },
+      });
+      await port.execute(runId, {
+        id: "ready",
+        action: { kind: "advance", durationMs: 1000 },
+      });
+      const taskId = (await agents.status(runId, citizen.id))!.control.taskId!,
+        runner = new AgentRunner(worlds, agents, port, () => ({
+          async respond() {
+            calls++;
+            const call = {
+              name: "time_wait",
+              arguments: '{"durationMs":60000}',
+              callId: "once",
+            };
+            return {
+              responseId: "one",
+              model: "fixture",
+              call,
+              output: [
+                {
+                  type: "function_call",
+                  name: call.name,
+                  arguments: call.arguments,
+                  call_id: call.callId,
+                },
+              ],
+              inputTokens: 100,
+              cachedTokens: 0,
+              outputTokens: 30,
+            };
+          },
+        }));
+      await runner.run(taskId);
+      expect(calls).toBe(1);
+      expect(
+        Object.values((await worlds.current(runId)).state.jobs),
+      ).toHaveLength(1);
+      expect((await agents.rounds(taskId))[0]!.status).toBe("applied");
+      expect(
+        (await agents.status(runId, citizen.id))!.budget!.reservedMicroUsd,
+      ).toBe(0);
+      await port.execute(runId, {
+        id: "stop",
+        action: { kind: "set-status", status: "paused" },
+      });
+    } finally {
+      if (runId)
+        await worlds.release(runId, owner, await worlds.claim(runId, owner));
+      await pool.end();
+    }
+  },
+  60000,
+);
+live("a temporary heartbeat transport failure does not abort an inference while its ownership lease is still valid",async()=>{
+ const {db,pool}=createDatabase(process.env.DATABASE_URL!),worlds=new WorldStore(db),owner=crypto.randomUUID();let runId="",calls=0,heartbeats=0;
+ class BriefDisconnect extends AgentStore {override async heartbeat(guard:AgentGuard){heartbeats++;if(heartbeats===1)throw new Error("Connection terminated unexpectedly");return super.heartbeat(guard)}}
+ const agents=new BriefDisconnect(db),port={async execute(id:string,command:Command,guard?:AgentGuard){return worlds.execute(id,owner,await worlds.claim(id,owner),command,guard)}};
+ try{const input=parseScenario(scenario),citizen=input.citizens[0]!;runId=(await worlds.create(input,"heartbeat-continuity-fixture",undefined,{provider:"fixture",citizenId:citizen.id,model:agentPolicy.model,maxRequests:4,spendingLimitMicroUsd:100000})).state.runId;await port.execute(runId,{id:"start",action:{kind:"set-status",status:"running"}});await port.execute(runId,{id:"ready",action:{kind:"advance",durationMs:1000}});
+ const taskId=(await agents.status(runId,citizen.id))!.control.taskId!,runner=new AgentRunner(worlds,agents,port,()=>({async respond(_request,signal){calls++;await new Promise<void>((resolve,reject)=>{const timer=setTimeout(resolve,6500);signal?.addEventListener("abort",()=>{clearTimeout(timer);reject(new Error("Request was aborted"))},{once:true})});const call={name:"time_wait",arguments:'{"durationMs":60000}',callId:"heartbeat-once"};return {responseId:"one",model:"fixture",call,output:[{type:"function_call",name:call.name,arguments:call.arguments,call_id:call.callId}],inputTokens:100,cachedTokens:0,outputTokens:30}}}));
+ await runner.run(taskId);expect(heartbeats).toBeGreaterThanOrEqual(1);expect(calls).toBe(1);expect(Object.values((await worlds.current(runId)).state.jobs)).toHaveLength(1);await port.execute(runId,{id:"stop",action:{kind:"set-status",status:"paused"}});
+ }finally{if(runId)await worlds.release(runId,owner,await worlds.claim(runId,owner));await pool.end()}
+},60000);

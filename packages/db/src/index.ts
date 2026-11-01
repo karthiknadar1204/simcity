@@ -5,10 +5,13 @@ import * as schema from "./schema";
 export { sql } from "drizzle-orm";
 export type Database = ReturnType<typeof createDatabase>["db"];
 
-export function createDatabase(databaseUrl: string) {
+export function createDatabase(
+  databaseUrl: string,
+  options: { max?: number } = {},
+) {
   const pool = new Pool({
     connectionString: databaseUrl,
-    max: 5,
+    max: options.max ?? 5,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
     statement_timeout: 7_000,

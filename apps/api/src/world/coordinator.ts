@@ -78,7 +78,7 @@ export class Coordinator {
             const current = this.owned.get(id);
             if (this.stopping || current?.state.status !== "running") return;
             if (await this.store.hasReadyThinking(id, current.state.simTimeMs))
-              return;
+              {current.generation=await this.store.claim(id,this.ownerId);return;}
             const nextPhysical = Math.min(
               ...Object.values(current.state.jobs)
                 .filter((job) => job.status === "running")

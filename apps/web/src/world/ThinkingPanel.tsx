@@ -9,7 +9,7 @@ type ThinkingView = {
     configuration: { model: string };
     taskId: string | null;
   };
-  budget: {
+  budget: null | {
     spentMicroUsd: number;
     reservedMicroUsd: number;
     limitMicroUsd: number;
@@ -24,6 +24,7 @@ type ThinkingView = {
     context: unknown;
     outcome: string | null;
     rounds: {
+      request: unknown;
       round: number;
       status: string;
       inputTokens: number;
@@ -53,9 +54,11 @@ const dollars = (amount: number) => `$${(amount / 1000000).toFixed(4)}`;
 export function ThinkingPanel({
   runId,
   citizenId,
+  asOf,
 }: {
   runId: string;
   citizenId: string;
+  asOf?: number;
 }) {
   const [view, setView] = useState<ThinkingView | null>(null);
   const [message, setMessage] = useState("");
@@ -67,7 +70,7 @@ export function ThinkingPanel({
       loading = true;
       try {
         const reply = await request<Reply>(
-          `/runs/${runId}/citizens/${citizenId}/thinking`,
+          `/runs/${runId}/citizens/${citizenId}/thinking${asOf === undefined ? "" : `?asOf=${asOf}`}`,
           { signal: controller.signal },
         );
         if (!controller.signal.aborted) {
@@ -87,7 +90,7 @@ export function ThinkingPanel({
       clearInterval(timer);
       controller.abort();
     };
-  }, [runId, citizenId]);
+  }, [runId, citizenId, asOf]);
   if (!view)
     return <p className="muted">{message || "Loading citizen decisions…"}</p>;
   const { control, budget } = view;
@@ -102,12 +105,14 @@ export function ThinkingPanel({
           : control.status}
       </span>
       <p className="muted">{control.configuration.model}</p>
-      <p className="spending">
-        Estimated budget use: {dollars(budget.spentMicroUsd)} /{" "}
-        {dollars(budget.limitMicroUsd)} · {budget.requests}/{budget.maxRequests}{" "}
-        model requests
-      </p>
-      {budget.reservedMicroUsd > 0 && (
+      {budget && (
+        <p className="spending">
+          Estimated budget use: {dollars(budget.spentMicroUsd)} /{" "}
+          {dollars(budget.limitMicroUsd)} · {budget.requests}/
+          {budget.maxRequests} model requests across all citizens
+        </p>
+      )}
+      {budget && budget.reservedMicroUsd > 0 && (
         <p className="muted">
           {dollars(budget.reservedMicroUsd)} reserved / unresolved estimates
         </p>
@@ -128,6 +133,12 @@ export function ThinkingPanel({
         </button>
       )}
       {message && <p className="muted">{message}</p>}
+      {asOf !== undefined && (
+        <p className="muted">
+          Completed decisions available by event #{asOf}. Legacy traces without
+          a completion boundary are omitted.
+        </p>
+      )}
       {view.turns.map((turn, index) => (
         <details key={turn.id} open={index === 0}>
           <summary>
@@ -167,6 +178,10 @@ export function ThinkingPanel({
                     </pre>
                   </details>
                 )}
+                <details>
+                  <summary>Exact model request</summary>
+                  <pre>{JSON.stringify(round.request, null, 2)}</pre>
+                </details>
               </li>
             ))}
           </ol>

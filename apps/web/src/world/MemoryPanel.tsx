@@ -43,7 +43,9 @@ export function MemoryPanel({
   const [query, setQuery] = useState(""),
     [search, setSearch] = useState("");
   const [error, setError] = useState(""),
-    [source, setSource] = useState<unknown>(null);
+    [source, setSource] = useState<{ asOf: number; value: unknown } | null>(
+      null,
+    );
   const historicalSequence = replaying ? sequence : undefined;
   useEffect(() => {
     if (!open) return;
@@ -79,11 +81,12 @@ export function MemoryPanel({
   }, [runId, citizenId, open, search, historicalSequence]);
   const read = async (id: string) => {
     try {
-      setSource(
-        await request(
+      setSource({
+        asOf: view?.asOf ?? sequence,
+        value: await request(
           `/runs/${runId}/citizens/${citizenId}/memories/${encodeURIComponent(id)}?asOf=${view?.asOf ?? sequence}`,
         ),
-      );
+      });
     } catch (error) {
       setError(error instanceof Error ? error.message : "Source unavailable.");
     }
@@ -95,7 +98,7 @@ export function MemoryPanel({
     >
       <summary>Memory & context inspector</summary>
       {error && <p role="alert">{error}</p>}
-      {view && (
+      {view && (!replaying || view.asOf === sequence) && (
         <>
           <p className="muted">
             {view.variant} · knowledge at event #{view.asOf}. Search here uses
@@ -185,11 +188,11 @@ export function MemoryPanel({
               )}
             </details>
           ))}
-          {source != null && (
+          {source != null && (!replaying || source.asOf === sequence) && (
             <details open>
               <summary>Original evidence / version</summary>
               <button onClick={() => setSource(null)}>Close evidence</button>
-              <pre>{JSON.stringify(source, null, 2)}</pre>
+              <pre>{JSON.stringify(source.value, null, 2)}</pre>
             </details>
           )}
           <h3>Retrieval & final context</h3>

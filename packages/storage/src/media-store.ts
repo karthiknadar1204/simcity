@@ -55,6 +55,23 @@ export class MediaStore {
       .orderBy(desc(backgroundTasks.createdAt))
       .limit(20);
   }
+  async markQueued(id: string) {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(backgroundTasks)
+        .set({ status: "queued" })
+        .where(
+          and(
+            eq(backgroundTasks.id, id),
+            eq(backgroundTasks.status, "pending"),
+          ),
+        );
+      await tx
+        .update(outbox)
+        .set({ publishedAt: new Date() })
+        .where(eq(outbox.taskId, id));
+    });
+  }
   async candidates() {
     return this.db
       .select({ id: videoExports.id })

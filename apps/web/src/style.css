@@ -399,3 +399,17 @@ code {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+.camera-controls,.timeline,.recordings-panel {padding:14px 16px;border-top:1px solid #3c5044}
+.camera-controls {display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.camera-controls label,.timeline label {display:flex;align-items:center;gap:8px}
+.timeline input[type=range] {width:100%;padding:12px 0;accent-color:#d7d9b0}
+.recordings-panel video {width:100%;max-height:400px;margin-top:16px;background:#17251f}
+.export-fields {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.export-fields label {display:flex;flex-direction:column;gap:6px;font-size:12px}
+.export-fields input {min-width:0;width:100%}
+a {color:#e3d3a4}
+.conversation ol {padding-left:18px;font-size:13px}
+.conversation li p {margin:4px 0}
+.citizen-panel {max-height:1100px;overflow:auto}
+.thinking-panel details pre,.memory-panel pre {max-height:280px;overflow:auto}
+@media(max-width:700px){.export-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Action, Citizen, Observation, WorldState } from "@repo/contracts";
-import { parseCommand } from "@repo/contracts";
+import { activeConversation, parseCommand } from "@repo/contracts";
 import { request } from "../lib/api";
 import { ThinkingPanel } from "./ThinkingPanel";
 import { MemoryPanel } from "./MemoryPanel";
@@ -67,6 +67,26 @@ export function CitizenPanel({
             : "OpenAI citizen"}
         </span>
       )}
+      {activeConversation(state, citizen.id) && (
+        <section className="conversation">
+          <h3>Conversation</h3>
+          <p className="muted">
+            {activeConversation(state, citizen.id)!.status} · next speaker{" "}
+            {state.citizens[
+              activeConversation(state, citizen.id)!.nextSpeakerId!
+            ]?.name ?? "none"}
+          </p>
+          <ol>
+            {activeConversation(state, citizen.id)!.turns.map((turn) => (
+              <li key={turn.sequence}>
+                <strong>{state.citizens[turn.speakerId]?.name}</strong>
+                <p>{turn.text}</p>
+                <small>Delivered at event #{turn.sequence}</small>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       {citizen.plan && (
         <section className="plan">
           <h3>Current intention</h3>
@@ -102,18 +122,13 @@ export function CitizenPanel({
           </details>
         </section>
       )}
-      {autonomous && !replaying && (
+      {autonomous && (
         <ThinkingPanel
-          key={`${state.runId}-${citizen.id}`}
+          key={`${state.runId}-${citizen.id}-${replaying ? state.sequence : "live"}`}
           runId={state.runId}
           citizenId={citizen.id}
+          asOf={replaying ? state.sequence : undefined}
         />
-      )}
-      {autonomous && replaying && (
-        <p className="muted">
-          This is the plan saved at the historical boundary. Live thinking
-          traces are hidden.
-        </p>
       )}
       <MemoryPanel
         key={`${state.runId}-${citizen.id}-${replaying}`}

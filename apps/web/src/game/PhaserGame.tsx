@@ -1,46 +1,64 @@
 import { useEffect, useRef } from "react";
 import type { Point, WorldState } from "@repo/contracts";
+import type { SceneFrame } from "@repo/playback";
 import { createGame } from "./createGame";
-
 export function PhaserGame({
   state,
   selectedId,
-  replaying,
+  frame,
+  follow,
+  zoom,
   onTile,
 }: {
   state: WorldState;
   selectedId: string;
   replaying: boolean;
+  frame?: SceneFrame | null;
+  follow?: boolean;
+  zoom?: number;
   onTile: (point: Point, shift: boolean) => void;
 }) {
-  const container = useRef<HTMLDivElement>(null);
-  const game = useRef<ReturnType<typeof createGame> | null>(null);
-  const handler = useRef(onTile);
+  const container = useRef<HTMLDivElement>(null),
+    game = useRef<ReturnType<typeof createGame> | null>(null),
+    handler = useRef(onTile);
   useEffect(() => {
     handler.current = onTile;
   }, [onTile]);
   useEffect(() => {
     if (!container.current) return;
-    game.current = createGame(container.current, (point, shift) =>
+    const renderer = createGame(container.current, (point, shift) =>
       handler.current(point, shift),
     );
+    game.current = renderer;
     return () => {
-      game.current?.destroy();
+      renderer.destroy();
       game.current = null;
     };
   }, []);
   useEffect(() => {
-    game.current?.setWorld(state);
-  }, [state, replaying]);
+    if (frame) game.current?.setFrame(frame);
+    else game.current?.setWorld(state);
+  }, [state, frame]);
   useEffect(() => {
     game.current?.setSelection(selectedId);
   }, [selectedId]);
+  useEffect(() => {
+    game.current?.follow(Boolean(follow));
+  }, [follow]);
+  useEffect(() => {
+    if (zoom)
+      game.current?.setCamera({
+        x: (state.map.width * state.map.tileSize) / 2,
+        y: (state.map.height * state.map.tileSize) / 2,
+        zoom,
+      });
+  }, [zoom, state.map.width, state.map.height, state.map.tileSize]);
   return (
     <div
       className="game"
       style={{ aspectRatio: `${state.map.width} / ${state.map.height}` }}
       ref={container}
-      aria-label="Town map. Select a citizen then click a tile to move. Shift click to toggle a blocked tile."
+      aria-label="Town map. Drag to pan, scroll to zoom, or select a citizen to follow."
     />
   );
 }

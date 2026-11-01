@@ -109,7 +109,11 @@ export function createGame(
           ).fillRect(x * t, y * t, t, t);
           if (noise === 0)
             g.fillStyle(0xaccb7d).fillRect(x * t + 7, y * t + 21, 2, 3);
-          if (y === 8 || x === 9 || y === 4)
+          if (
+            y === Math.floor(s.map.height / 2) ||
+            x === Math.floor(s.map.width / 2) - 3 ||
+            y === Math.floor(s.map.height / 4)
+          )
             g.fillStyle(0xc5b38b).fillRect(x * t, y * t, t, t);
         }
       for (const p of s.map.blocked) {
@@ -122,6 +126,7 @@ export function createGame(
         g.fillStyle(0x2f6248).fillRect(p.x * t + 3, p.y * t + 2, t - 6, t - 12);
         g.fillStyle(0x407957).fillRect(p.x * t + 7, p.y * t - 2, t - 14, t - 7);
       }
+      const labelLevels = new Map<string, number>();
       for (const o of Object.values(s.objects)) {
         const x = o.position.x * t,
           y = o.position.y * t;
@@ -152,11 +157,14 @@ export function createGame(
           g.fillStyle(0x425b53).fillRect(x + 9, y + 15, 12, 17);
           g.fillStyle(0xe8d18a).fillRect(x - 1, y + 7, 6, 7);
         }
+        const labelKey = `${o.position.x}:${o.position.y}`,
+          level = labelLevels.get(labelKey) ?? 0;
+        labelLevels.set(labelKey, level + 1);
         this.label(
           `object-${o.id}`,
           o.name,
           x + t / 2,
-          y - 11,
+          y - 11 - level * 14,
           "#f3ecd6",
           "#344b3de6",
         );

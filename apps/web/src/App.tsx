@@ -1,3 +1,5 @@
+import { configuredAgents } from "@repo/contracts";
+import { RecordingsPanel } from "./world/RecordingsPanel";
 import { useState } from "react";
 import { PhaserGame } from "./game/PhaserGame";
 import { CitizenPanel } from "./world/CitizenPanel";
@@ -16,7 +18,10 @@ function clock(time: number, dayLength: number) {
 export function App() {
   const world = useWorld();
   const [selected, setSelected] = useState("");
-  const [residentId, setResidentId] = useState("");
+  const [residentId, setResidentId] = useState("all");
+  const [follow, setFollow] = useState(false),
+    [zoom, setZoom] = useState(1);
+  const [seekTime, setSeekTime] = useState(0);
   const [scenario, setScenario] = useState("");
   const [boundary, setBoundary] = useState("0");
   const state = world.state;
@@ -25,7 +30,8 @@ export function App() {
     state?.citizens[world.manifest?.agent?.citizenId ?? ""] ??
     Object.values(state?.citizens ?? {})[0];
   const disabled = world.busy || world.replaying;
-  const aiCitizen = world.manifest?.agent?.citizenId;
+  const agents = world.manifest ? configuredAgents(world.manifest) : [];
+  const autonomous = agents.some((agent) => agent.citizenId === citizen?.id);
   const agentProvider = world.manifest?.agent?.provider;
   const chosenScenario =
     world.scenarios.find((item) => item.id === scenario) ?? world.scenarios[0];
@@ -33,14 +39,14 @@ export function App() {
     <main className="app">
       <header>
         <div>
-          <p className="eyebrow">SIMCITY / PHASE 03</p>
+          <p className="eyebrow">SIMCITY / PHASE 05</p>
           <h1>A little world, in motion.</h1>
           <p className="description">
             {agentProvider === "fixture"
               ? "Scripted provider fixture. This run tests mechanics and recovery."
-              : aiCitizen
-                ? "One citizen chooses with OpenAI. Every action has a real recorded outcome."
-                : "Operator sandbox. Create an AI town to run one autonomous citizen."}
+              : agents.length
+                ? "Citizens choose independently with OpenAI. Follow their day or replay recorded moments."
+                : "Operator sandbox. Create an AI town for autonomous citizens."}
           </p>
         </div>
         <span className={`status ${world.connected ? "online" : ""}`}>
@@ -84,11 +90,12 @@ export function App() {
           Create town
         </button>
         <label>
-          AI citizen
+          AI citizens
           <select
-            value={residentId || chosenScenario?.residents[0]?.id || ""}
+            value={residentId}
             onChange={(event) => setResidentId(event.target.value)}
           >
+            <option value="all">All three citizens</option>
             {chosenScenario?.residents.map((resident) => (
               <option key={resident.id} value={resident.id}>
                 {resident.name}
@@ -100,11 +107,15 @@ export function App() {
           className="primary"
           disabled={world.busy || !chosenScenario}
           onClick={() => (
-            setSelected(residentId || chosenScenario!.residents[0]!.id),
+            setSelected(
+              residentId === "all"
+                ? chosenScenario!.residents[0]!.id
+                : residentId,
+            ),
             void world.create(
               chosenScenario!.id,
               true,
-              residentId || chosenScenario!.residents[0]?.id,
+              residentId === "all" ? undefined : residentId,
             )
           )}
         >
@@ -115,7 +126,10 @@ export function App() {
         <>
           <section className="toolbar" aria-label="World controls">
             <strong className="clock">
-              {clock(state.simTimeMs, state.rules.dayLengthMs)}
+              {clock(
+                world.frame?.timeMs ?? state.simTimeMs,
+                state.rules.dayLengthMs,
+              )}
             </strong>
             <span className="pill">
               {world.replaying ? "Recorded history" : state.status}
@@ -180,13 +194,38 @@ export function App() {
                   </button>
                 ))}
               </div>
+              <div className="camera-controls">
+                <button onClick={() => setFollow(!follow)}>
+                  {follow ? "Stop following" : "Follow selected"}
+                </button>
+                <label>
+                  Map zoom
+                  <select
+                    value={zoom}
+                    onChange={(event) => {
+                      setFollow(false);
+                      setZoom(Number(event.target.value));
+                    }}
+                  >
+                    {[0.75, 1, 1.25, 1.5, 2].map((value) => (
+                      <option key={value} value={value}>
+                        {value}×
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="muted">Drag to pan · scroll to zoom</span>
+              </div>
               <PhaserGame
                 key={state.runId}
                 state={state}
                 selectedId={citizen.id}
                 replaying={world.replaying}
+                frame={world.frame}
+                follow={follow}
+                zoom={zoom}
                 onTile={(position, shift) => {
-                  if (disabled || (!shift && citizen.id === aiCitizen)) return;
+                  if (disabled || (!shift && autonomous)) return;
                   void world.command(
                     shift
                       ? {
@@ -205,12 +244,70 @@ export function App() {
                 }}
               />
               <p className="map-hint">
-                {citizen.id === aiCitizen
-                  ? "AI chooses destinations."
-                  : `Click a tile to move ${citizen.name}.`}{" "}
+                {world.replaying
+                  ? "Recorded movement. Use the timeline to seek."
+                  : autonomous
+                    ? "AI chooses destinations."
+                    : `Click a tile to move ${citizen.name}.`}{" "}
                 Shift + click toggles a blocked tile. Use Play or Step to
                 advance time.
               </p>
+              <div className="timeline">
+                <label htmlFor="recorded-time">
+                  Recorded time · {clock(world.timeMs, state.rules.dayLengthMs)}
+                </label>
+                <input
+                  id="recorded-time"
+                  aria-label="Recorded time"
+                  type="range"
+                  min={world.startMs}
+                  max={world.live?.simTimeMs ?? world.startMs}
+                  step="1"
+                  value={seekTime || world.timeMs}
+                  onChange={(event) => setSeekTime(Number(event.target.value))}
+                  onPointerUp={(event) => {
+                    void world.seekTime(Number(event.currentTarget.value));
+                    setSeekTime(0);
+                  }}
+                  onKeyUp={(event) => {
+                    void world.seekTime(Number(event.currentTarget.value));
+                    setSeekTime(0);
+                  }}
+                />
+                <div className="button-row">
+                  <button
+                    disabled={world.busy}
+                    onClick={() => void world.seekTime(world.startMs)}
+                  >
+                    Replay from start
+                  </button>
+                  {world.replaying && (
+                    <>
+                      <button
+                        disabled={world.busy}
+                        onClick={() => world.setPlaying(!world.playing)}
+                      >
+                        {world.playing ? "Pause replay" : "Play replay"}
+                      </button>
+                      <label>
+                        Replay speed
+                        <select
+                          value={world.rate}
+                          onChange={(event) =>
+                            world.setRate(Number(event.target.value))
+                          }
+                        >
+                          {[0.25, 1, 4, 16, 60, 600].map((value) => (
+                            <option key={value} value={value}>
+                              {value}×
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+              </div>
               <div className="replay-controls">
                 <label htmlFor="sequence">Recorded event</label>
                 <input
@@ -234,14 +331,21 @@ export function App() {
                   Current #{state.sequence} / latest #{world.live?.sequence}
                 </span>
               </div>
+              <RecordingsPanel
+                key={state.runId}
+                state={world.live ?? state}
+                startMs={world.startMs}
+                selectedTime={world.timeMs}
+                onArchive={world.loadArchive}
+              />
             </section>
             <CitizenPanel
               key={`${state.runId}-${citizen.id}`}
               state={state}
               citizen={citizen}
-              disabled={disabled || citizen.id === aiCitizen}
+              disabled={disabled || autonomous}
               replaying={world.replaying}
-              autonomous={citizen.id === aiCitizen}
+              autonomous={autonomous}
               agentProvider={agentProvider}
               command={world.command}
             />

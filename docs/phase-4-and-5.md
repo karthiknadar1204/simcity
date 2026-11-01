@@ -17,3 +17,11 @@ Verified so far:
 - The first two autonomous day pilots stopped early on database transport and context headroom problems. They do not count as a successful full day. A fresh capped pilot is running after those fixes.
 
 The video worker, browser controls, final day gate and final browser verification remain to be checked.
+
+## Recorded video and restart checks
+
+The real export path passed on fixture run `e0183edb-bbcd-49b9-91c6-11386c494b6d`: 60 frames, 1280×720, 30 fps, 2.000 seconds, 26,625 MP4 bytes. The video, PNG thumbnail and JSON manifest passed R2 full readback checks. Source world hashes matched before and after export. Actor calls and memory calls were both zero. The browser loaded the signed-storage result through the same-origin API proxy and reported 1280×720, two seconds, no playback error.
+
+A separate process test killed a server process while three citizens slept, waited for its ownership lease to expire, and resumed from a new process. All three woke at 07:00 on day two. The pre-restart world hash and simulation time matched exactly. Three consolidation tasks retained their pre-sleep cutoffs. This is a controlled mechanics fixture, not evidence that a model independently chose sleep.
+
+The installed Neon 1.2.0 driver had a reproducible queued-connection regression. A test held the only pool slot, queued a second query, terminated the held session, and released it. The queued query stayed stuck on 1.2.0. Pinning the workspace to 1.1.0 made the same test pass. See [the upstream issue](https://github.com/neondatabase/serverless/issues/230) and [the release history](https://github.com/neondatabase/serverless/blob/main/CHANGELOG.md). No database schema or TLS settings changed for this workaround.

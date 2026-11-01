@@ -3,7 +3,7 @@ import "@repo/db/env";
 import { createDatabase } from "@repo/db";
 import { artifacts, backgroundTasks } from "@repo/db/tables";
 import { eq } from "drizzle-orm";
-import { WorldStore } from "@repo/storage";
+import { RecordingStore, WorldStore } from "@repo/storage";
 import { parseScenario } from "@repo/contracts";
 import {
   createArchiveQueue,
@@ -27,7 +27,8 @@ live(
         "archive-integration-fixture",
       );
       const taskId = `${created.state.runId}-checkpoint-0`;
-      await dispatchOutbox(db, queue, [taskId]);
+      const recordingId = `${created.state.runId}-recording-0-0`;
+      await dispatchOutbox(db, queue, [taskId, recordingId]);
       const lost = await queue.getJob(taskId);
       expect(lost).toBeDefined();
       await lost!.remove();
@@ -53,6 +54,22 @@ live(
         .where(eq(artifacts.id, taskId));
       expect(artifact?.bytes).toBeGreaterThan(0);
       expect(artifact?.checksum).toHaveLength(64);
+      const recordingDeadline = Date.now() + 20000;
+      let chunks = await new RecordingStore(db).list(created.state.runId);
+      while (
+        !chunks.find((row) => row.chunk.id === recordingId)?.chunk.manifest &&
+        Date.now() < recordingDeadline
+      ) {
+        await Bun.sleep(250);
+        chunks = await new RecordingStore(db).list(created.state.runId);
+      }
+      expect(chunks.find((row) => row.chunk.id === recordingId)?.status).toBe(
+        "completed",
+      );
+      expect(
+        chunks.find((row) => row.chunk.id === recordingId)?.chunk.manifest
+          ?.checksum,
+      ).toHaveLength(64);
       console.log(
         `R2 checkpoint readback verified for fixture run ${created.state.runId}`,
       );

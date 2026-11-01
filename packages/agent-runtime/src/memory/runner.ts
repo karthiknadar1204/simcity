@@ -1,3 +1,4 @@
+import { durableDatabase } from "../database";
 import {
   memoryPolicy,
   type MemoryCallRequest,
@@ -173,8 +174,9 @@ export class MemoryRunner {
         .heartbeat(guard)
         .then((valid) => {
           if (!valid) abort.abort();
+          else leaseConfirmedAt=Date.now();
         })
-        .catch(() => abort.abort())
+        .catch(() => {if(Date.now()-leaseConfirmedAt>=memoryPolicy.leaseMs-5000)abort.abort()})
         .finally(() => {
           renewing = false;
         });
@@ -187,16 +189,20 @@ export class MemoryRunner {
           await this.work.finish(payload.runId, guard);
           return;
         }
-        call = await this.work.reserveCall(
-          payload.runId,
-          payload.citizenId,
-          guard,
-          "main",
-          request,
+        call = await durableDatabase(() =>
+          this.work.reserveCall(
+            payload.runId,
+            payload.citizenId,
+            guard,
+            "main",
+            request,
+          ),
         );
         inFlight = true;
         const answer = await this.model.respond(request, abort.signal);
-        await this.work.saveAnswer(payload.runId, guard, "main", answer);
+        await durableDatabase(() =>
+          this.work.saveAnswer(payload.runId, guard, "main", answer),
+        );
         inFlight = false;
         call = { ...call, status: "responded", answer };
       } else if (call.status !== "responded") {

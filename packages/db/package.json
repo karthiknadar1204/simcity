@@ -18,10 +18,10 @@
     "test": "bun test src"
   },
   "dependencies": {
-    "@neondatabase/serverless": "1.2.0",
+    "@neondatabase/serverless": "1.1.0",
+    "@repo/contracts": "workspace:*",
     "dotenv": "18.0.9",
-    "drizzle-orm": "0.45.4",
-    "@repo/contracts": "workspace:*"
+    "drizzle-orm": "0.45.4"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

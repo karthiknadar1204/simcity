@@ -29,6 +29,8 @@ Read `skill-centre.md` and apply relevant skills from `.agent/skills`. That dire
 - `packages/db`: Drizzle schemas, migrations, and database connection.
 - `packages/storage`: transactional recording, recovery, and object archives.
 - `packages/jobs`: Redis/BullMQ transport and outbox reconciliation.
+- `packages/playback`: recorded time lookup, scene frames and committed movement interpolation. No model or database imports.
+- `packages/media`: owned headless Chromium capture, FFmpeg encoding and durable export delivery.
 - `apps/api`: thin Hono routes and the world coordinator.
 - `apps/worker`: background delivery and archive processing.
 - `apps/web`: React controls and Phaser rendering of authoritative state.

@@ -8,6 +8,9 @@ import {
   outbox,
   recordingChunks,
   thinkingTurns,
+  contextCompilations,
+  memoryTasks,
+  memoryCalls,
 } from "@repo/db/tables";
 import {
   contentHash,
@@ -165,6 +168,41 @@ export class RecordingStore {
           .where(inArray(modelRounds.taskId, ids))
           .orderBy(asc(modelRounds.taskId), asc(modelRounds.round))
       : [];
+    const memoryIds = [
+      ...new Set(
+        recorded
+          .filter(
+            (event) =>
+              event.kind === "memory.published" ||
+              event.kind === "memory.indexed",
+          )
+          .map((event) => event.causeId),
+      ),
+    ];
+    if (memoryIds.length > 500)
+      throw new Error(
+        "Recording memory trace interval exceeds its limit; hot data retained.",
+      );
+    const [publishedTasks, publishedCalls, audits] = await Promise.all([
+      memoryIds.length
+        ? this.db
+            .select()
+            .from(memoryTasks)
+            .where(inArray(memoryTasks.id, memoryIds))
+        : [],
+      memoryIds.length
+        ? this.db
+            .select()
+            .from(memoryCalls)
+            .where(inArray(memoryCalls.taskId, memoryIds))
+        : [],
+      ids.length
+        ? this.db
+            .select()
+            .from(contextCompilations)
+            .where(inArray(contextCompilations.taskId, ids))
+        : [],
+    ]);
     const bundle: PlaybackBundle = {
       version: 1,
       runId: payload.runId,
@@ -178,6 +216,11 @@ export class RecordingStore {
       version: 1,
       bundle,
       endStateHash: end.stateHash,
+      retrievalAudits: audits,
+      memoryTraces: publishedTasks.map((task) => ({
+        ...task,
+        calls: publishedCalls.filter((call) => call.taskId === task.id),
+      })),
       traces: turns.map(({ turn }) => ({
         ...turn,
         rounds: rounds.filter((round) => round.taskId === turn.id),
@@ -189,9 +232,28 @@ export class RecordingStore {
     payload: RecordingPayload,
     archive: ArchiveStore,
   ) {
+    const [existing] = await this.db
+      .select()
+      .from(recordingChunks)
+      .where(
+        and(
+          eq(recordingChunks.id, taskId),
+          eq(recordingChunks.runId, payload.runId),
+          eq(recordingChunks.fromSequence, payload.fromSequence),
+          eq(recordingChunks.toSequence, payload.toSequence),
+        ),
+      )
+      .limit(1);
+    if (!existing)
+      throw new Error("Recording task does not match its interval.");
+    if (existing.manifest) return existing.manifest;
     const source = await this.source(payload),
       body = JSON.stringify(source),
       digest = new Bun.CryptoHasher("sha256").update(body).digest("hex");
+    if (new TextEncoder().encode(body).length > 16 * 1024 * 1024)
+      throw new Error(
+        "Recording exceeds 16 MiB; retain hot data and subdivide.",
+      );
     const uploaded = await archive.put(
       `runs/${payload.runId}/recordings/${payload.fromSequence}-${payload.toSequence}-${digest}.json`,
       body,
@@ -204,7 +266,7 @@ export class RecordingStore {
       startMs: source.bundle.fromMs,
       endMs: source.bundle.toMs,
       ...uploaded,
-      traceCount: source.traces.length,
+      traceCount: source.traces.length + source.memoryTraces.length,
     };
     await this.db.transaction(async (tx: Transaction) => {
       await tx
@@ -221,7 +283,12 @@ export class RecordingStore {
         .set({ status: "completed", error: null })
         .where(eq(backgroundTasks.id, taskId));
     });
-    return manifest;
+    const [published] = await this.db
+      .select()
+      .from(recordingChunks)
+      .where(eq(recordingChunks.id, taskId))
+      .limit(1);
+    return published!.manifest!;
   }
   async read(runId: string, id: string, archive: ArchiveStore) {
     const [row] = await this.db

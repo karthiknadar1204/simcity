@@ -44,3 +44,41 @@ live(
   },
   20000,
 );
+live(
+  "a query already queued behind a dropped connection proceeds without a later query nudging the pool",
+  async () => {
+    const { pool } = createDatabase(process.env.DATABASE_URL!, { max: 1 }),
+      killer = createDatabase(process.env.DATABASE_URL!);
+    const client = await pool.connect();
+    let released = false;
+    try {
+      await client.query("begin");
+      const pid = (
+        await client.query<{ pid: number }>("select pg_backend_pid() as pid")
+      ).rows[0]!.pid;
+      const disconnected = new Promise<void>((resolve) =>
+        client.once("error", () => resolve()),
+      );
+      const queued = pool.query<{ ok: number }>("select 1 as ok");
+      await killer.pool.query("select pg_terminate_backend($1)", [pid]);
+      await disconnected;
+      client.release(true);
+      released = true;
+      const result = await Promise.race([
+        queued,
+        Bun.sleep(2500).then(() => {
+          throw new Error(
+            "Queued query stayed stuck after the disconnected client was removed",
+          );
+        }),
+      ]);
+      expect(result.rows[0]!.ok).toBe(1);
+    } finally {
+      if (!released) client.release(true);
+      await pool.query("select 1").catch(() => undefined);
+      await pool.end();
+      await killer.pool.end();
+    }
+  },
+  20000,
+);

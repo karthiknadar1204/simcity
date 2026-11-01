@@ -141,8 +141,29 @@ try {
     maxRequests: 2000,
     spendingLimitMicroUsd: 1500000,
   }));
-  runId = (await worlds.create(input, revision, provenance, configurations))
-    .state.runId;
+  if (process.env.RESUME_RUN_ID) {
+    runId = process.env.RESUME_RUN_ID;
+    const prior = await Bun.file(`.local/town-pilot-${runId}.json`).json();
+    report.previousAttempt = {
+      status: prior.status,
+      error: prior.error,
+      finalSequence: prior.finalSequence,
+    };
+    for (const decision of prior.decisions ?? []) {
+      decisions.push(decision);
+      identities.add(decision.citizenId);
+    }
+    for (const citizen of input.citizens) {
+      const status = await retryDatabase(() =>
+        agents.status(runId, citizen.id),
+      );
+      if (status?.control.error)
+        await retryDatabase(() => agents.retry(runId, citizen.id));
+    }
+  } else {
+    runId = (await worlds.create(input, revision, provenance, configurations))
+      .state.runId;
+  }
   report.runId = runId;
   console.log(`Live town ${runId}, total cap $1.50 / 2000 model operations.`);
   await command({ kind: "set-status", status: "running" });

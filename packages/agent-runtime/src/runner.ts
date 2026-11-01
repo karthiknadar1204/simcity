@@ -1,3 +1,4 @@
+import { durableDatabase } from "./database";
 import { agentPolicy, activeConversation } from "@repo/contracts";
 import {
   AgentStore,
@@ -35,6 +36,7 @@ export class AgentRunner {
     let activeRound: number | null = null;
     const abort = new AbortController();
     let renewing = false;
+    let leaseConfirmedAt=Date.now();
     const timer = setInterval(() => {
       if (renewing) return;
       renewing = true;
@@ -42,8 +44,9 @@ export class AgentRunner {
         .heartbeat(guard)
         .then((valid) => {
           if (!valid) abort.abort();
+          else leaseConfirmedAt=Date.now();
         })
-        .catch(() => abort.abort())
+        .catch(() => {if(Date.now()-leaseConfirmedAt>=agentPolicy.leaseMs-5000)abort.abort()})
         .finally(() => {
           renewing = false;
         });
@@ -89,7 +92,9 @@ export class AgentRunner {
             else memories.initial.pop();
           }
         }
-        await this.agents.saveContext(state.runId, guard, context, boundary);
+        await durableDatabase(() =>
+          this.agents.saveContext(state.runId, guard, context!, boundary),
+        );
       }
       const broker = new ToolBroker(
         this.worlds,
@@ -118,18 +123,17 @@ export class AgentRunner {
             history,
             allowTextOnly,
           );
-          record = await this.agents.reserveRound(
-            state.runId,
-            guard,
-            round,
-            request,
+          record = await durableDatabase(() =>
+            this.agents.reserveRound(state.runId, guard, round, request),
           );
           activeRound = round;
           const answer = await this.model(configuration.model).respond(
             request,
             abort.signal,
           );
-          await this.agents.saveAnswer(state.runId, guard, round, answer);
+          await durableDatabase(() =>
+            this.agents.saveAnswer(state.runId, guard, round, answer),
+          );
           activeRound = null;
           record = { ...record, status: "responded", answer };
         } else if (
@@ -174,7 +178,9 @@ export class AgentRunner {
             round,
           ));
         if (!record.outcome)
-          await this.agents.saveOutcome(state.runId, guard, round, outcome);
+          await durableDatabase(() =>
+            this.agents.saveOutcome(state.runId, guard, round, outcome),
+          );
         broker.rememberOutcome(outcome);
         if (
           answer.call.name === "actions_cancel" &&

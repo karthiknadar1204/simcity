@@ -7,11 +7,15 @@
     "build": "bun build src/index.ts --target bun --outdir dist --packages external",
     "start": "bun dist/index.js",
     "check-types": "tsc --noEmit",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "test": "bun test src"
   },
   "dependencies": {
     "@repo/db": "workspace:*",
-    "hono": "4.13.16"
+    "hono": "4.13.16",
+    "@repo/contracts": "workspace:*",
+    "@repo/storage": "workspace:*",
+    "@repo/engine": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

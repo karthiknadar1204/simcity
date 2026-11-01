@@ -11,7 +11,9 @@
     "db:generate": "bun run --cwd packages/db db:generate",
     "db:migrate": "bun run --cwd packages/db db:migrate",
     "db:studio": "bun run --cwd packages/db db:studio",
-    "db:check": "bun run --cwd packages/db db:check"
+    "db:check": "bun run --cwd packages/db db:check",
+    "redis:start": "bun run scripts/redis-start.ts",
+    "test:integration": "RUN_INTEGRATION=1 bun test packages/storage/src/store.integration.test.ts packages/jobs/src/archive.integration.test.ts"
   },
   "devDependencies": {
     "prettier": "3.9.6",
